@@ -7,28 +7,18 @@ from sentence_transformers import SentenceTransformer
 from config.settings import (
     OPENROUTER_API_KEY,
     OPENROUTER_BASE_URL,
-    KAKUSHIN_BASE_URL,
-    USE_KAKUSHIN,
     DEFAULT_MODEL,
     VECTOR_DB_PATH
 )
 
 # ----- LLM Model -----
 def get_llm_model():
-    if USE_KAKUSHIN and KAKUSHIN_BASE_URL:
-        return OpenAIChat(
-            id="claude-4-sonnet",
-            base_url=KAKUSHIN_BASE_URL,
-            api_key="dummy",
-            temperature=0.5,
-        )
-    else:
-        return OpenAIChat(
-            id=DEFAULT_MODEL,
-            base_url=OPENROUTER_BASE_URL,
-            api_key=OPENROUTER_API_KEY,
-            temperature=0.5,
-        )
+    return OpenAIChat(
+        id=DEFAULT_MODEL,
+        base_url=OPENROUTER_BASE_URL,
+        api_key=OPENROUTER_API_KEY,
+        temperature=0.5,
+    )
 
 # ----- Custom Embedder (using sentence_transformers) -----
 class CustomEmbedder(Embedder):

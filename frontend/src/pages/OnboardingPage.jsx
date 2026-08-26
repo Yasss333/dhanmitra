@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useUserProfile } from '@/context/UserProfileContext'
 import { useSpeechSynthesis } from '@/hooks/useSpeechSynthesis'
@@ -130,118 +131,206 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen rupee-bg flex flex-col items-center justify-center px-4">
+    <div className="min-h-screen rupee-bg flex flex-col items-center justify-center px-4 relative bg-gradient-to-br from-orange-50 via-white to-green-50">
 
       {/* Logo strip */}
-      <div className="flex items-center gap-2 mb-8">
-        <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center shadow">
-          <span className="text-white text-xl font-bold">₹</span>
+      <motion.div 
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.6 }}
+        className="flex items-center gap-2 mb-8"
+      >
+        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center shadow-lg shadow-orange-200/50">
+          <span className="text-white text-2xl font-bold">₹</span>
         </div>
-        <span className="text-2xl font-bold text-orange-600">DhanMitra</span>
-      </div>
+        <span className="text-3xl font-bold text-orange-600">DhanMitra</span>
+      </motion.div>
+
+      {/* Back button */}
+      <AnimatePresence>
+        {step > 1 && (
+          <motion.button 
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            onClick={() => setStep(step - 1)} 
+            className="absolute top-6 left-4 p-3 rounded-full bg-slate-800/60 hover:bg-slate-700/80 text-white border border-slate-600/50 transition-all hover:shadow-lg"
+            aria-label="Go back to previous step"
+          >
+            ← Back
+          </motion.button>
+        )}
+      </AnimatePresence>
 
       {/* Step indicator */}
-      <div className="flex gap-2 mb-8">
+      <motion.div 
+        initial={{ y: -10, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.5, delay: 0.2 }}
+        className="flex gap-2 mb-8"
+      >
         {[1,2,3,4].map((s) => (
-          <div
+          <motion.div
             key={s}
-            className={`h-2 rounded-full transition-all duration-300 ${s === step ? 'w-8 bg-orange-500' : s < step ? 'w-4 bg-orange-300' : 'w-4 bg-slate-200'}`}
+            initial={{ width: 16 }}
+            animate={{ 
+              width: s === step ? 32 : s < step ? 16 : 16,
+              backgroundColor: s === step ? '#f97316' : s < step ? '#fdba74' : '#e2e8f0'
+            }}
+            transition={{ duration: 0.3 }}
+            className="h-2 rounded-full"
           />
         ))}
-      </div>
+      </motion.div>
 
       {/* ── STEP 1: Language ── */}
-      {step === 1 && (
-        <div className="w-full max-w-sm">
-          <p className="text-center text-slate-600 mb-2 text-sm">Namaste / नमस्ते / नमस्कार / ನಮಸ್ಕಾರ</p>
-          <h2 className="text-xl font-bold text-center text-slate-800 mb-6">
-            आप कौनसी भाषा चाहते हैं?<br/>
-            <span className="text-base font-normal text-slate-500">Which language do you prefer?</span>
-          </h2>
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { v: 'hindi',   l: 'हिंदी',    sub: 'Hindi' },
-              { v: 'marathi', l: 'मराठी',    sub: 'Marathi' },
-              { v: 'kannada', l: 'ಕನ್ನಡ',   sub: 'Kannada' },
-              { v: 'english', l: 'English',  sub: 'अंग्रेज़ी' },
-            ].map((lang) => (
-              <button
-                key={lang.v}
-                onClick={() => handleLanguage(lang.v)}
-                className="py-5 rounded-2xl border-2 border-orange-200 bg-white hover:border-orange-400 hover:bg-orange-50 transition-all active:scale-95 flex flex-col items-center gap-1 shadow-sm"
-              >
-                <span className="text-xl font-bold text-slate-800">{lang.l}</span>
-                <span className="text-xs text-slate-400">{lang.sub}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      <AnimatePresence mode="wait">
+        {step === 1 && (
+          <motion.div 
+            key="step1"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.4 }}
+            className="w-full max-w-sm"
+          >
+            <p className="text-center text-slate-600 mb-2 text-sm">Namaste / नमस्ते / नमस्कार / ನಮಸ್ಕಾರ</p>
+            <h2 className="text-xl font-bold text-center text-slate-800 mb-6">
+              आप कौनसी भाषा चाहते हैं?<br/>
+              <span className="text-base font-normal text-slate-500">Which language do you prefer?</span>
+            </h2>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { v: 'hindi',   l: 'हिंदी',    sub: 'Hindi' },
+                { v: 'marathi', l: 'मराठी',    sub: 'Marathi' },
+                { v: 'kannada', l: 'ಕನ್ನಡ',   sub: 'Kannada' },
+                { v: 'english', l: 'English',  sub: 'अंग्रेज़ी' },
+              ].map((lang, i) => (
+                <motion.button
+                  key={lang.v}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3, delay: i * 0.1 }}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => handleLanguage(lang.v)}
+                  className="py-5 rounded-2xl border-2 border-orange-200 bg-white hover:border-orange-400 hover:bg-orange-50 transition-all flex flex-col items-center gap-1 shadow-sm hover:shadow-md"
+                >
+                  <span className="text-xl font-bold text-slate-800">{lang.l}</span>
+                  <span className="text-xs text-slate-400">{lang.sub}</span>
+                </motion.button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── STEP 2: Occupation ── */}
-      {step === 2 && (
-        <div className="w-full max-w-sm">
-          <h2 className="text-xl font-bold text-center text-slate-800 mb-6">{t.q2}</h2>
-          <div className="grid grid-cols-2 gap-3">
-            {occs.map((occ) => (
-              <button
-                key={occ.v}
-                onClick={() => handleOccupation(occ.v)}
-                className="py-5 rounded-2xl border-2 border-orange-200 bg-white hover:border-orange-400 hover:bg-orange-50 transition-all active:scale-95 flex flex-col items-center gap-2 shadow-sm"
-              >
-                <span className="text-3xl">{occ.e}</span>
-                <span className="text-sm font-semibold text-slate-700">{occ.l}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      <AnimatePresence mode="wait">
+        {step === 2 && (
+          <motion.div 
+            key="step2"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.4 }}
+            className="w-full max-w-sm"
+          >
+            <h2 className="text-xl font-bold text-center text-slate-800 mb-6">{t.q2}</h2>
+            <div className="grid grid-cols-2 gap-3">
+              {occs.map((occ, i) => (
+                <motion.button
+                  key={occ.v}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3, delay: i * 0.1 }}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => handleOccupation(occ.v)}
+                  className="py-5 rounded-2xl border-2 border-orange-200 bg-white hover:border-orange-400 hover:bg-orange-50 transition-all flex flex-col items-center gap-2 shadow-sm hover:shadow-md"
+                >
+                  <span className="text-3xl">{occ.e}</span>
+                  <span className="text-sm font-semibold text-slate-700">{occ.l}</span>
+                </motion.button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── STEP 3: Accessibility ── */}
-      {step === 3 && (
-        <div className="w-full max-w-sm">
-          <h2 className="text-xl font-bold text-center text-slate-800 mb-6">{t.q3}</h2>
-          <div className="flex flex-col gap-3">
-            {[
-              { v: 'normal',     e: '👁️',  l: t.normal },
-              { v: 'low_vision', e: '🔍',  l: t.low_vision },
-              { v: 'voice_only', e: '🎙️', l: t.voice_only },
-            ].map((opt) => (
-              <button
-                key={opt.v}
-                onClick={() => handleAccessibility(opt.v)}
-                className="py-4 px-5 rounded-2xl border-2 border-orange-200 bg-white hover:border-orange-400 hover:bg-orange-50 transition-all active:scale-95 flex items-center gap-4 shadow-sm"
-              >
-                <span className="text-2xl">{opt.e}</span>
-                <span className="text-sm font-semibold text-slate-700 text-left">{opt.l}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      <AnimatePresence mode="wait">
+        {step === 3 && (
+          <motion.div 
+            key="step3"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.4 }}
+            className="w-full max-w-sm"
+          >
+            <h2 className="text-xl font-bold text-center text-slate-800 mb-6">{t.q3}</h2>
+            <div className="flex flex-col gap-3">
+              {[
+                { v: 'normal',     e: '👁️',  l: t.normal },
+                { v: 'low_vision', e: '🔍',  l: t.low_vision },
+                { v: 'voice_only', e: '🎙️', l: t.voice_only },
+              ].map((opt, i) => (
+                <motion.button
+                  key={opt.v}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.3, delay: i * 0.1 }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => handleAccessibility(opt.v)}
+                  className="py-4 px-5 rounded-2xl border-2 border-orange-200 bg-white hover:border-orange-400 hover:bg-orange-50 transition-all flex items-center gap-4 shadow-sm hover:shadow-md"
+                >
+                  <span className="text-2xl">{opt.e}</span>
+                  <span className="text-sm font-semibold text-slate-700 text-left">{opt.l}</span>
+                </motion.button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── STEP 4: Money comfort ── */}
-      {step === 4 && (
-        <div className="w-full max-w-sm">
-          <h2 className="text-xl font-bold text-center text-slate-800 mb-6">{t.q4}</h2>
-          <div className="flex flex-col gap-3">
-            {[
-              { v: 'beginner',     e: '🌱', l: t.low },
-              { v: 'intermediate', e: '📈', l: t.medium },
-              { v: 'advanced',     e: '🏆', l: t.high },
-            ].map((opt) => (
-              <button
-                key={opt.v}
-                onClick={() => handleMoneyComfort(opt.v)}
-                className="py-4 px-5 rounded-2xl border-2 border-orange-200 bg-white hover:border-orange-400 hover:bg-orange-50 transition-all active:scale-95 flex items-center gap-4 shadow-sm"
-              >
-                <span className="text-2xl">{opt.e}</span>
-                <span className="text-sm font-semibold text-slate-700">{opt.l}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      <AnimatePresence mode="wait">
+        {step === 4 && (
+          <motion.div 
+            key="step4"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.4 }}
+            className="w-full max-w-sm"
+          >
+            <h2 className="text-xl font-bold text-center text-slate-800 mb-6">{t.q4}</h2>
+            <div className="flex flex-col gap-3">
+              {[
+                { v: 'beginner',     e: '🌱', l: t.low },
+                { v: 'intermediate', e: '📈', l: t.medium },
+                { v: 'advanced',     e: '🏆', l: t.high },
+              ].map((opt, i) => (
+                <motion.button
+                  key={opt.v}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.3, delay: i * 0.1 }}
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => handleMoneyComfort(opt.v)}
+                  className="py-4 px-5 rounded-2xl border-2 border-orange-200 bg-white hover:border-orange-400 hover:bg-orange-50 transition-all flex items-center gap-4 shadow-sm hover:shadow-md"
+                >
+                  <span className="text-2xl">{opt.e}</span>
+                  <span className="text-sm font-semibold text-slate-700">{opt.l}</span>
+                </motion.button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }   

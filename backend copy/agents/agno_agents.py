@@ -1,7 +1,7 @@
 from agno.agent import Agent
 from agno.team import Team
 from agents.agno_setup import get_llm_model
-from agents.agno_tools import get_user_profile, search_schemes, apply_mitra_insights
+from agents.agno_tools import get_user_profile, search_schemes, apply_mitra_insights, get_stock_price , create_upi_payment_request  
 
 model = get_llm_model()
 
@@ -54,13 +54,34 @@ AgentScheme = Agent(
 AgentSahayak = Agent(
     name="Sahayak",
     model=model,
-    tools=[get_user_profile, apply_mitra_insights],
+    tools=[get_user_profile, apply_mitra_insights, get_stock_price, create_upi_payment_request],
     instructions=[
+
+         # NEW: Stock price instructions
+        "If the user asks about a specific stock (e.g., 'Nvidia', 'Apple', 'Reliance'), "
+        "you MUST call the 'get_stock_price' tool with the ticker symbol.",
+        "For Indian stocks, use the .NS suffix (e.g., 'RELIANCE.NS', 'TCS.NS', 'HDFCBANK.NS').",
+        "For US stocks, use the ticker directly (e.g., 'NVDA', 'AAPL', 'TSLA').",
+        "Always include the disclaimer in your response.",
+
+        #Upi SandBoxing
+        "If the user wants to save money, set up a recurring payment, or pay a bill, "
+        "call the 'create_upi_payment_request' tool with the amount and purpose.",
+        
+        "Example: If user says 'I want to save ₹500 for my child's education', "
+        "call create_upi_payment_request(amount=500, purpose='Child Education Fund').",
+        
+        "After creating the payment, inform the user that a payment request has been generated "
+        "and they can scan the QR code or click the link to pay.",
+
         "You are DhanMitra's Sahayak (General Helper). You handle all general financial queries, explanations, comparisons, and financial literacy challenges.",
         "If the user asks for a quiz or challenge, create a realistic financial scenario with 3 options and explain the correct answer.",
         "Adapt complexity to the user's money_comfort level (beginner/intermediate/advanced).",
         "Always use the 'apply_mitra_insights' tool to add rupee comparisons and risk flags.",
-        "Respond in the user's preferred language."
+        "Respond in the user's preferred language.",
+        "If the user asks for a quiz or challenge, generate a JSON response with these exact keys:",
+        "scenario (string), options (list of 4 strings), correctIndex (integer 0-3), explanation (string).",
+        "Output ONLY the valid JSON. No other text."
     ],
     markdown=False,
 )
@@ -73,6 +94,7 @@ AgentRouter = Team(
     mode="route",
     instructions=[
         "You are the DhanMitra Master Router. You analyze the user's message and delegate to the correct specialist agent.",
+        "Delegate to 'Sahayak' for general financial advice, quizzes, comparisons, **OR stock market queries**.",
         "Delegate to 'Guardian' if the user asks about scams, OTP, fraud, or cybercrime.",
         "Delegate to 'Companion' if the user talks about budgeting, expenses, income tracking, or savings.",
         "Delegate to 'Scheme_Finder' if the user asks about government schemes, subsidies, PM-KISAN, Mudra, etc.",

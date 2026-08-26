@@ -2,3 +2,6 @@
 __pycache__/
 *.pyc
 .venv/
+/whatsapp-Bridge/node_modules
+/whatsapp-Bridge/session-data
+/vector_store

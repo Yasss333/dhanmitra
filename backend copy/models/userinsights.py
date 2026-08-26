@@ -1,3 +1,5 @@
+from pydantic import BaseModel
+from typing import Optional
 {
   "user_id": "clerk_123",
   "insights": {

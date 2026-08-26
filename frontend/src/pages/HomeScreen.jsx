@@ -1,176 +1,264 @@
-import { useNavigate } from 'react-router-dom'
-import { useUser } from '@clerk/clerk-react'
-import { UserButton } from '@clerk/clerk-react'
-import { useUserProfile } from '@/context/UserProfileContext'
-import { Mic } from 'lucide-react'
-
-const NUDGES = {
-  farmer: {
-    hindi:   { text: 'PM-KISAN के लिए पंजीकरण खुला है — आप पात्र हो सकते हैं', action: 'जानें', query: 'PM-KISAN scheme eligibility' },
-    marathi: { text: 'PM-KISAN नोंदणी सुरू आहे — तुम्ही पात्र असू शकता', action: 'जाणून घ्या', query: 'PM-KISAN scheme eligibility' },
-    kannada: { text: 'PM-KISAN ನೋಂದಣಿ ತೆರೆದಿದೆ — ನೀವು ಅರ್ಹರಾಗಿರಬಹುದು', action: 'ತಿಳಿಯಿರಿ', query: 'PM-KISAN scheme eligibility' },
-    english: { text: 'PM-KISAN registrations are open — you may qualify', action: 'Learn more', query: 'PM-KISAN scheme eligibility' },
-  },
-  gig_worker: {
-    hindi:   { text: 'इस हफ्ते आमदनी दर्ज करें — अपनी बचत ट्रैक करें', action: 'दर्ज करें', query: 'help me log my income this week' },
-    marathi: { text: 'या आठवड्यात उत्पन्न नोंदवा — बचत ट्रॅक करा', action: 'नोंदवा', query: 'help me log my income this week' },
-    kannada: { text: 'ಈ ವಾರ ಆದಾಯ ದಾಖಲಿಸಿ — ಉಳಿತಾಯ ಟ್ರ್ಯಾಕ್ ಮಾಡಿ', action: 'ದಾಖಲಿಸಿ', query: 'help me log my income this week' },
-    english: { text: "Log this week's income — track your savings", action: 'Log now', query: 'help me log my income this week' },
-  },
-  homemaker: {
-    hindi:   { text: 'PM उज्ज्वला योजना — मुफ्त LPG कनेक्शन के लिए पात्रता जाँचें', action: 'जाँचें', query: 'PM Ujjwala Yojana eligibility' },
-    marathi: { text: 'PM उज्ज्वला योजना — मोफत LPG कनेक्शनसाठी पात्रता तपासा', action: 'तपासा', query: 'PM Ujjwala Yojana eligibility' },
-    kannada: { text: 'PM ಉಜ್ಜ್ವಲ ಯೋಜನೆ — ಉಚಿತ LPG ಸಂಪರ್ಕಕ್ಕಾಗಿ ಅರ್ಹತೆ ಪರಿಶೀಲಿಸಿ', action: 'ಪರಿಶೀಲಿಸಿ', query: 'PM Ujjwala Yojana eligibility' },
-    english: { text: 'PM Ujjwala Yojana — check eligibility for free LPG connection', action: 'Check now', query: 'PM Ujjwala Yojana eligibility' },
-  },
-  student: {
-    hindi:   { text: 'आज की वित्तीय चुनौती तैयार है — 60 सेकंड में पूरी करें', action: 'शुरू करें', query: 'give me a financial fitness challenge' },
-    marathi: { text: 'आजचे आर्थिक आव्हान तयार आहे — 60 सेकंदात पूर्ण करा', action: 'सुरू करा', query: 'give me a financial fitness challenge' },
-    kannada: { text: 'ಇಂದಿನ ಹಣಕಾಸು ಸವಾಲು ಸಿದ್ಧವಾಗಿದೆ — 60 ಸೆಕೆಂಡ್‌ನಲ್ಲಿ ಮುಗಿಸಿ', action: 'ಪ್ರಾರಂಭಿಸಿ', query: 'give me a financial fitness challenge' },
-    english: { text: "Today's financial challenge is ready — complete in 60 seconds", action: 'Start', query: 'give me a financial fitness challenge' },
-  },
-  salaried: {
-    hindi:   { text: 'अपने निवेश विकल्प जानें — PPF, NPS, या म्यूचुअल फंड?', action: 'जानें', query: 'explain PPF NPS and mutual fund options for salaried person' },
-    marathi: { text: 'तुमचे गुंतवणूक पर्याय जाणून घ्या — PPF, NPS, किंवा म्युच्युअल फंड?', action: 'जाणून घ्या', query: 'explain PPF NPS and mutual fund options for salaried person' },
-    kannada: { text: 'ನಿಮ್ಮ ಹೂಡಿಕೆ ಆಯ್ಕೆಗಳನ್ನು ತಿಳಿಯಿರಿ — PPF, NPS, ಅಥವಾ ಮ್ಯೂಚುಯಲ್ ಫಂಡ್?', action: 'ತಿಳಿಯಿರಿ', query: 'explain PPF NPS and mutual fund options for salaried person' },
-    english: { text: 'Know your investment options — PPF, NPS, or Mutual Funds?', action: 'Learn', query: 'explain PPF NPS and mutual fund options for salaried person' },
-  },
-  business_owner: {
-    hindi:   { text: 'मुद्रा लोन — बिना गारंटी ₹10 लाख तक का कर्ज', action: 'जानें', query: 'PM Mudra loan eligibility and process' },
-    marathi: { text: 'मुद्रा कर्ज — हमीशिवाय ₹10 लाखापर्यंत', action: 'जाणून घ्या', query: 'PM Mudra loan eligibility and process' },
-    kannada: { text: 'ಮುದ್ರಾ ಸಾಲ — ಯಾವುದೇ ಖಾತರಿಯಿಲ್ಲದೆ ₹10 ಲಕ್ಷದವರೆಗೆ', action: 'ತಿಳಿಯಿರಿ', query: 'PM Mudra loan eligibility and process' },
-    english: { text: 'Mudra Loan — up to ₹10 lakh with no collateral', action: 'Learn more', query: 'PM Mudra loan eligibility and process' },
-  },
-}
-
-const GREET = {
-  hindi:   'नमस्ते',
-  marathi: 'नमस्कार',
-  kannada: 'ನಮಸ್ಕಾರ',
-  english: 'Hello',
-}
-
-const TALK_LABEL = {
-  hindi:   'धनमित्र से बात करें',
-  marathi: 'धनमित्राशी बोला',
-  kannada: 'ಧನಮಿತ್ರರೊಂದಿಗೆ ಮಾತನಾಡಿ',
-  english: 'Talk to DhanMitra',
-}
-
-const FITNESS_LABEL = {
-  hindi:   "आज की वित्तीय चुनौती",
-  marathi: "आजचे आर्थिक आव्हान",
-  kannada: "ಇಂದಿನ ಹಣಕಾಸು ಸವಾಲು",
-  english: "Today's Financial Challenge",
-}
-
-const LEVEL_NAMES = {
-  beginner:     { hindi: 'शुरुआत', english: 'Beginner',  marathi: 'सुरुवात',  kannada: 'ಆರಂಭ' },
-  aware:        { hindi: 'जागरूक', english: 'Aware',     marathi: 'जागरूक',   kannada: 'ಜಾಗೃತ' },
-  smart:        { hindi: 'स्मार्ट', english: 'Smart',    marathi: 'स्मार्ट',  kannada: 'ಸ್ಮಾರ್ಟ್' },
-  champion:     { hindi: 'चैंपियन', english: 'Champion', marathi: 'चॅम्पियन', kannada: 'ಚಾಂಪಿಯನ್' },
-}
+import { useState, useEffect } from 'react';
+import { useUser } from '@clerk/clerk-react';
+import { useUserProfile } from '@/context/UserProfileContext';
+import { useNavigate } from 'react-router-dom';
+import AppLayout from '@/components/layout/AppLayout';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 
 export default function HomeScreen() {
-  const { user } = useUser()
-  const { profile } = useUserProfile()
-  const navigate = useNavigate()
+  const { user } = useUser();
+  const { profile, updateProfile } = useUserProfile();
+  const navigate = useNavigate();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const lang = profile.language || 'english'
-  const occ  = profile.occupation || 'gig_worker'
+  const firstName = user?.firstName || 'User';
 
-  const nudge = NUDGES[occ]?.[lang] || NUDGES['gig_worker']['english']
-  const firstName = user?.firstName || user?.username || 'Friend'
-  const level = profile.fitnessLevel || 'beginner'
-  const levelName = LEVEL_NAMES[level]?.[lang] || level
-  const streak = profile.fitnessStreak || 0
-  const score = profile.fitnessScore || 0
+  // 🔥 FETCH OR AUTO-CREATE PROFILE
+  useEffect(() => {
+    const fetchOrCreateProfile = async () => {
+      if (!user) return;
+      
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/profile/${user.id}`);
+        
+        if (res.status === 404) {
+          // 🔥 PROFILE DOESN'T EXIST → CREATE IT!
+          const defaultProfile = {
+            user_id: user.id,
+            language: profile?.language || 'english',
+            occupation: profile?.occupation || 'gig_worker',
+            money_comfort: profile?.moneyComfort || profile?.money_comfort || 'beginner',
+            goal: profile?.goal || 'emergency_fund',
+            onboarding_complete: profile?.onboardingComplete || true,
+            fitnessScore: profile?.fitnessScore || 0,
+            fitnessLevel: profile?.fitnessLevel || 'Beginner',
+            fitnessStreak: profile?.fitnessStreak || 0,
+          };
+          
+          await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/profile`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(defaultProfile),
+          });
+          
+          // Refetch after creation
+          const retryRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/profile/${user.id}`);
+          if (retryRes.ok) {
+            const freshData = await retryRes.json();
+            setData(freshData);
+            // Sync context
+            updateProfile({
+              fitnessScore: freshData.fitnessScore || 0,
+              fitnessLevel: freshData.fitnessLevel || 'Beginner',
+              fitnessStreak: freshData.fitnessStreak || 0,
+            });
+          }
+        } else if (res.ok) {
+          const freshData = await res.json();
+          setData(freshData);
+        }
+      } catch (error) {
+        console.error('Profile fetch error:', error);
+        // Fallback to context
+        setData({
+          fitnessScore: profile?.fitnessScore || 0,
+          fitnessLevel: profile?.fitnessLevel || 'Beginner',
+          fitnessStreak: profile?.fitnessStreak || 0,
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchOrCreateProfile();
+  }, [user]);
 
-  const handleNudge = () => {
-    navigate('/chat', { state: { initialMessage: nudge.query } })
+  // Extract values
+  const score = data?.fitnessScore ?? profile?.fitnessScore ?? 0;
+  const level = data?.fitnessLevel ?? profile?.fitnessLevel ?? 'Beginner';
+  const streak = data?.fitnessStreak ?? profile?.fitnessStreak ?? 0;
+  
+  // For savings goal – default or stored
+  const savedAmount = data?.savedAmount ?? 0;
+  const targetAmount = data?.targetAmount ?? 500;
+  const progressPercent = Math.min(100, targetAmount > 0 ? (savedAmount / targetAmount) * 100 : 0);
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-[#73819E]">Loading your financial snapshot...</div>
+        </div>
+      </AppLayout>
+    );
   }
 
-  const handleChallenge = () => {
-    navigate('/chat', { state: { initialMessage: 'give me a financial fitness challenge' } })
-  }
+  // Dynamic chart data (tied to score)
+  const weekData = [
+    { spend: Math.max(20, 60 - score * 0.2), save: Math.min(60, 30 + score * 0.3) },
+    { spend: Math.max(20, 52 - score * 0.15), save: Math.min(60, 38 + score * 0.25) },
+    { spend: Math.max(20, 46 - score * 0.1), save: Math.min(60, 48 + score * 0.2) },
+    { spend: Math.max(20, 40 - score * 0.05), save: Math.min(60, 58 + score * 0.15) },
+  ];
+  const savingsTrend = weekData[weekData.length - 1].save - weekData[0].save;
+  const trendText = savingsTrend > 0 ? `▲ Savings up ${Math.round(savingsTrend)}%` : `▼ Savings down ${Math.round(Math.abs(savingsTrend))}%`;
+  const trendColor = savingsTrend > 0 ? 'text-green-600' : 'text-red-500';
 
   return (
-    <div className="min-h-screen rupee-bg flex flex-col">
-
+    <AppLayout>
       {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-6 pb-2">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center">
-            <span className="text-white text-sm font-bold">₹</span>
-          </div>
-          <span className="font-bold text-orange-600 text-lg">DhanMitra</span>
+      <div className="flex justify-between items-start mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-800">Hello, {firstName} 👋</h1>
+          <p className="text-slate-500 text-sm mt-1">Here's your financial snapshot for today</p>
         </div>
-        <UserButton afterSignOutUrl="/" />
-      </div>
-
-      {/* Greeting */}
-      <div className="px-5 pt-4 pb-2">
-        <h1 className="text-2xl font-bold text-slate-800">
-          {GREET[lang]}, {firstName} 👋
-        </h1>
-      </div>
-
-      <div className="flex-1 px-5 pb-8 space-y-4 overflow-y-auto">
-
-        {/* Proactive nudge card */}
-        <div className="bg-white rounded-2xl border border-orange-200 shadow-sm p-4">
-          <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-full bg-orange-100 flex items-center justify-center shrink-0 mt-0.5">
-              <span className="text-lg">💡</span>
-            </div>
-            <div className="flex-1">
-              <p className="text-sm text-slate-700 leading-relaxed">{nudge.text}</p>
-              <button
-                onClick={handleNudge}
-                className="mt-2 text-xs font-semibold text-orange-600 hover:text-orange-700"
-              >
-                {nudge.action} →
-              </button>
-            </div>
+        <div className="flex items-center gap-3">
+          <div className="px-4 py-2 border border-orange-200 bg-orange-50 rounded-full text-sm font-medium text-orange-700 shadow-sm">
+            🌐 {profile?.language || 'English'}
+          </div>
+          <div className="w-11 h-11 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center font-bold text-white shadow-md shadow-orange-200/50">
+            {firstName[0]}
           </div>
         </div>
+      </div>
 
-        {/* Fitness card */}
-        <div className="bg-white rounded-2xl border border-green-200 shadow-sm p-4">
-          <div className="flex items-center justify-between mb-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        {/* FITNESS GAUGE */}
+        <Card className="border-orange-200 shadow-lg shadow-orange-100/50 p-6 flex items-center gap-6 bg-gradient-to-br from-white to-orange-50/30 hover:shadow-xl transition-shadow duration-300">
+          <div className="relative w-28 h-28 shrink-0">
+            <svg className="w-28 h-28 -rotate-90">
+              <circle cx="56" cy="56" r="46" fill="none" stroke="#F1EADA" strokeWidth="10" />
+              <circle 
+                cx="56" cy="56" r="46" 
+                fill="none" stroke="#FF6A1A" strokeWidth="10" 
+                strokeLinecap="round"
+                strokeDasharray={`${Math.min(100, score)}`}
+                strokeDashoffset="0"
+                className="drop-shadow-md"
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-3xl font-bold font-poppins text-slate-800">{Math.round(score)}</span>
+              <span className="text-xs text-slate-500">/ 100</span>
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Financial Fitness</p>
+            <h2 className="text-lg font-semibold mt-1 text-slate-800">
+              {score >= 80 ? 'Excellent! 🎉' : score >= 50 ? 'Good progress!' : 'Keep going! 💪'}
+            </h2>
+            <div className="flex gap-2 mt-2">
+              <Badge variant="secondary" className="bg-green-50 text-green-700 border-green-200">🌱 {level}</Badge>
+              <Badge variant="secondary" className="bg-orange-50 text-orange-700 border-orange-200">🔥 {streak}-day streak</Badge>
+            </div>
+            <p className="text-xs text-slate-500 mt-2">
+              {score >= 50 ? 'You\'re on the right track!' : 'Complete a challenge to start.'}
+            </p>
+          </div>
+        </Card>
+
+        {/* PROACTIVE NUDGE */}
+        <Card className="border-orange-200 shadow-lg shadow-orange-100/50 p-6 bg-gradient-to-br from-white to-orange-50/30 hover:shadow-xl transition-shadow duration-300">
+          <p className="text-xs font-semibold uppercase tracking-wider text-orange-600">⚡ Proactive Nudge</p>
+          <h3 className="font-semibold mt-1 text-slate-800">
+            {profile?.goal === 'emergency_fund' && 'Build your ₹10,000 emergency fund'}
+            {profile?.goal === 'children_education' && 'Save for your child\'s education'}
+            {!profile?.goal && 'Set a goal to save ₹500 this month'}
+          </h3>
+          <p className="text-sm text-slate-500 mt-1">
+            You've saved ₹{savedAmount} so far. 
+            {savedAmount < targetAmount && ' A small top-up keeps you on track.'}
+            {savedAmount >= targetAmount && ' 🎉 Goal achieved! Set a new one.'}
+          </p>
+          <Progress value={progressPercent} className="h-2 mt-3" />
+          <div className="flex justify-between items-center mt-2">
+            <span className="text-xs text-slate-500">₹{savedAmount} of ₹{targetAmount} saved</span>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="border-orange-500 text-orange-600 hover:bg-orange-50 hover:shadow-sm transition-all"
+              onClick={() => navigate('/chat', { state: { initialMessage: 'I want to update my savings goal' } })}
+            >
+              Check in now
+            </Button>
+          </div>
+        </Card>
+
+        {/* INSIGHTS */}
+        <Card className="border-orange-200 shadow-lg shadow-orange-100/50 p-6 col-span-1 md:col-span-2 bg-gradient-to-br from-white to-orange-50/30 hover:shadow-xl transition-shadow duration-300">
+          <div className="flex justify-between items-start mb-4">
             <div>
-              <p className="text-xs text-slate-500 font-medium uppercase tracking-wide">Financial Fitness</p>
-              <p className="text-base font-bold text-slate-800">{FITNESS_LABEL[lang]}</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">📈 Insights</p>
+              <h3 className="font-semibold text-slate-800">Spending vs. Savings — Last 4 Weeks</h3>
+            </div>
+            <span className={`text-sm font-semibold ${trendColor}`}>{trendText}</span>
+          </div>
+          <div className="flex items-end gap-4 h-24">
+            {weekData.map((week, i) => (
+              <div key={i} className="flex flex-col items-center flex-1">
+                <div className="flex gap-1.5 items-end h-20">
+                  <div className="w-4 bg-purple-200 rounded-t hover:bg-purple-300 transition-colors" style={{ height: `${week.spend}%` }} />
+                  <div className="w-4 bg-orange-500 rounded-t hover:bg-orange-600 transition-colors" style={{ height: `${week.save}%` }} />
+                </div>
+                <span className="text-xs text-slate-500 mt-1">Wk {i + 1}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-4 mt-3 text-xs text-slate-500">
+            <span><span className="inline-block w-3 h-3 bg-purple-200 rounded mr-1.5" /> Spending</span>
+            <span><span className="inline-block w-3 h-3 bg-orange-500 rounded mr-1.5" /> Savings</span>
+          </div>
+        </Card>
+
+        {/* SCHEME CARD */}
+        <Card className="border-orange-200 shadow-lg shadow-orange-100/50 p-4 flex items-start gap-3 cursor-pointer bg-gradient-to-br from-white to-orange-50/30 hover:shadow-xl hover:scale-[1.02] transition-all duration-300" onClick={() => navigate('/chat', { state: { initialMessage: 'Show me relevant government schemes for me' } })}>
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-100 to-orange-200 flex items-center justify-center text-xl shrink-0">💡</div>
+          <div>
+            <h4 className="font-medium text-sm text-slate-800">
+              {profile?.occupation === 'farmer' && 'PM-KISAN — ₹6,000/year for farmers'}
+              {profile?.occupation === 'gig_worker' && 'PM SVANidhi — loans for street vendors'}
+              {profile?.occupation === 'homemaker' && 'PM Ujjwala — free LPG connection'}
+              {!profile?.occupation && 'Check eligibility for government schemes'}
+            </h4>
+            <button className="text-orange-600 text-sm font-medium hover:underline mt-1">Check now →</button>
+          </div>
+        </Card>
+
+        {/* CHALLENGE CARD */}
+        <Card className="border-orange-200 shadow-lg shadow-orange-100/50 p-4 bg-gradient-to-br from-white to-orange-50/30 hover:shadow-xl transition-shadow duration-300">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Financial Fitness</p>
+              <h4 className="font-semibold text-slate-800">Today's Challenge</h4>
             </div>
             <div className="text-right">
-              <p className="text-xs text-slate-400">{streak} 🔥</p>
-              <p className="text-sm font-bold text-green-600">{levelName}</p>
+              <span className="text-orange-600 font-bold text-sm">{streak} 🔥</span>
+              <Badge variant="outline" className="block text-xs mt-1 border-orange-200 text-orange-700">{level}</Badge>
             </div>
           </div>
-          <div className="w-full bg-slate-100 rounded-full h-2 mb-3">
-            <div
-              className="bg-green-500 h-2 rounded-full transition-all"
-              style={{ width: `${Math.min(100, score)}%` }}
-            />
-          </div>
-          <button
-            onClick={handleChallenge}
-            className="w-full py-2.5 rounded-xl bg-green-50 border border-green-200 text-green-700 text-sm font-semibold hover:bg-green-100 transition-all active:scale-95"
+          <Progress value={Math.min(100, (score / 100) * 100)} className="h-1.5 mt-3" />
+          <Button 
+            className="w-full mt-3 bg-gradient-to-r from-green-50 to-green-100 text-green-700 hover:from-green-100 hover:to-green-200 border border-green-200 hover:shadow-md transition-all"
+            onClick={() => navigate('/fitness')}
           >
-            ⚡ {lang === 'hindi' ? 'चुनौती लें' : lang === 'marathi' ? 'आव्हान घ्या' : lang === 'kannada' ? 'ಸವಾಲು ತೆಗೆದುಕೊಳ್ಳಿ' : 'Take challenge'}
-          </button>
-        </div>
-
-        {/* Big talk button */}
-        <button
-          onClick={() => navigate('/chat')}
-          className="w-full py-5 rounded-2xl bg-gradient-to-r from-orange-500 to-orange-600 text-white font-bold text-lg shadow-md hover:from-orange-600 hover:to-orange-700 transition-all active:scale-95 flex items-center justify-center gap-3"
-        >
-          <Mic className="h-6 w-6" />
-          {TALK_LABEL[lang]}
-        </button>
+            ⚡ Take Challenge
+          </Button>
+        </Card>
 
       </div>
-    </div>
-  )
+
+      {/* FAB */}
+      <Button 
+        className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white text-2xl shadow-xl shadow-orange-500/40 hover:shadow-2xl hover:shadow-orange-500/50 hover:scale-110 transition-all duration-300"
+        onClick={() => navigate('/chat')}
+      >
+        🎤
+      </Button>
+    </AppLayout>
+  );
 }
