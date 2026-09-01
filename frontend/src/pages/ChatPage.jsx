@@ -1,19 +1,18 @@
 import { AssistantRuntimeProvider, useLocalRuntime } from '@assistant-ui/react';
-import { Thread } from '@/components/assistant-ui/thread'; // scaffolded, not from the npm package
-import { useUser } from '@clerk/clerk-react';              // <-- ADDED this import
+import { Thread } from '@/components/assistant-ui/thread';
+import { useUser } from '@clerk/clerk-react';
 import { useUserProfile } from '@/context/UserProfileContext';
+import { useToast } from '@/context/ToastContext';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
-import { useRef } from 'react';
-import { sendChatMessage } from '@/lib/api';
+import { useRef, useEffect } from 'react';
+import { sendChatMessage, getChatHistory } from '@/lib/api';
 
-export default function ChatPage() {
-  const { user } = useUser();                               // <-- Now this works
-  const { profile } = useUserProfile();
+function ChatAdapter({ userId, profile, sessionIdRef }) {
   const navigate = useNavigate();
-  const sessionIdRef = useRef(`session-${user?.id}-${Date.now()}`);
+  const { addToast } = useToast();
 
-  const dhanMitraAdapter = {
+  const adapter = {
     async run({ messages, abortSignal }) {
       const last = messages[messages.length - 1];
       const text = last.content.filter(p => p.type === 'text').map(p => p.text).join('');
@@ -21,39 +20,54 @@ export default function ChatPage() {
       const payload = {
         message: text,
         mode: 'sahayak',
-        session_id: sessionIdRef.current,
-        user_id: user?.id || 'anonymous',
+        sessionId: sessionIdRef.current,
+        userId: userId || 'anonymous',
         profile,
       };
 
       try {
         const data = await sendChatMessage(payload);
         const content = [{ type: 'text', text: data.reply || 'Sorry, I could not process that.' }];
-        
-        // Add agent trace if available
+
         if (data.agent_trace) {
-          content.push({
-            type: 'agent-trace',
-            data: data.agent_trace
-          });
+          content.push({ type: 'agent-trace', data: data.agent_trace });
         }
-        
+
         return { content };
       } catch (error) {
         console.error('Chat error:', error);
-        return { content: [{ type: 'text', text: 'Service unavailable right now. Please try again.' }] };
+        addToast('Service unavailable. Please try again.', 'error');
+        throw error;
       }
     },
   };
 
-  const runtime = useLocalRuntime(dhanMitraAdapter);
+  const runtime = useLocalRuntime(adapter);
+
+  // Load conversation history on mount
+  useEffect(() => {
+    const sessionId = sessionIdRef.current;
+    if (!sessionId) return;
+
+    getChatHistory(sessionId)
+      .then(({ messages }) => {
+        if (!messages || messages.length === 0) return;
+        const threadMessages = messages.map((msg, i) => ({
+          id: `history-${i}`,
+          role: msg.role,
+          content: [{ type: 'text', text: msg.content }],
+        }));
+        runtime.thread.messages = threadMessages;
+        runtime.thread.notify();
+      })
+      .catch(() => {});
+  }, [runtime, sessionIdRef]);
 
   return (
     <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 to-orange-50/30">
-      {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 bg-white/80 backdrop-blur-sm border-b border-slate-200/60 shadow-sm shrink-0">
-        <button 
-          onClick={() => navigate('/home')} 
+        <button
+          onClick={() => navigate('/home')}
           className="p-2 rounded-lg hover:bg-slate-100 hover:shadow-sm transition-all duration-200"
         >
           <ArrowLeft className="h-5 w-5 text-slate-600" />
@@ -76,5 +90,36 @@ export default function ChatPage() {
         </div>
       </AssistantRuntimeProvider>
     </div>
+  );
+}
+
+export default function ChatPage() {
+  const { user } = useUser();
+  const { profile } = useUserProfile();
+
+  // Persist session ID across re-renders, keyed to user
+  const sessionIdRef = useRef(
+    () => {
+      const stored = localStorage.getItem(`dhanmitra_session_${user?.id}`);
+      if (stored) return stored;
+      const newId = `session-${user?.id}-${Date.now()}`;
+      localStorage.setItem(`dhanmitra_session_${user?.id}`, newId);
+      return newId;
+    }
+  );
+
+  // Initialize ref value
+  if (!sessionIdRef.current) {
+    const stored = localStorage.getItem(`dhanmitra_session_${user?.id}`);
+    sessionIdRef.current = stored || `session-${user?.id}-${Date.now()}`;
+    if (!stored) localStorage.setItem(`dhanmitra_session_${user?.id}`, sessionIdRef.current);
+  }
+
+  return (
+    <ChatAdapter
+      userId={user?.id}
+      profile={profile}
+      sessionIdRef={sessionIdRef}
+    />
   );
 }

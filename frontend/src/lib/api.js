@@ -17,11 +17,18 @@ export async function sendChatMessage({ message, mode, sessionId, userId, profil
     throw new Error(`Chat request failed: ${res.status}`)
   }
 
-  // Expected shape:
-  // {
-  //   reply: "string",
-  //   agent_trace: { systems: ["Scheme Finder", "Risk Flag"], internalLoop: [{ turn: 1, label: "..." }] } | null
-  // }
+  return res.json()
+}
+
+export async function getChatHistory(sessionId) {
+  const res = await fetch(`${API_BASE}/api/chat/history/${encodeURIComponent(sessionId)}`)
+  if (!res.ok) throw new Error(`Failed to load history: ${res.status}`)
+  return res.json()
+}
+
+export async function getUserSessions(userId) {
+  const res = await fetch(`${API_BASE}/api/chat/sessions?user_id=${encodeURIComponent(userId)}`)
+  if (!res.ok) throw new Error(`Failed to load sessions: ${res.status}`)
   return res.json()
 }
 
@@ -55,5 +62,32 @@ export async function addSandboxCredit({ transaction_id, amount, upi_id, payer_v
   });
   const body = await res.json();
   if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
+  return body;
+}
+
+// ----- Razorpay Standard Checkout -----
+
+export async function createRazorpayOrder({ amount, purpose, session_id, user_id }) {
+  const res = await fetch(`${API_BASE}/api/razorpay/create-order`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount, purpose, session_id, user_id }),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    const detail = typeof body?.detail === 'string' ? body.detail : `HTTP ${res.status}`;
+    throw new Error(detail);
+  }
+  return body;
+}
+
+export async function verifyRazorpayPayment({ razorpay_payment_id, razorpay_order_id, razorpay_signature, session_id, user_id }) {
+  const res = await fetch(`${API_BASE}/api/razorpay/verify-payment`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ razorpay_payment_id, razorpay_order_id, razorpay_signature, session_id, user_id }),
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(body?.detail || `HTTP ${res.status}`);
   return body;
 }

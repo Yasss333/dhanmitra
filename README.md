@@ -2,7 +2,7 @@
   <img src="dhan.png" alt="DhanMitra Banner" width="100%">
 </p>
 
-<h1 align="center">DhanMitra</h1>
+<!-- <h1 align="center">DhanMitra</h1> -->
 
 <p align="center">
   <b>Your AI financial companion, built for Bharat.</b><br>
@@ -42,10 +42,12 @@ DhanMitra is a **voice-first, multilingual AI assistant** that speaks Hindi, Mar
 | 🗣️ | **Voice-First** | Tap-to-speak orb with browser STT/TTS for visually impaired users |
 | 📱 | **Multi-Channel** | Web app, Telegram bot, WhatsApp — all connected |
 | 🧠 | **Mitra Insights** | Auto-extracts your income, EMIs, goals from chat and enriches every reply |
+| 🧠 | **Yahoo Finance API** | Gives real time stock prices and comparions|
 
 ---
 
 ## Architecture
+Eraser Link:https://app.eraser.io/workspace/VpJA1BFUFbMVJ6wI3kiT
 
 ```
 ┌──────────────┐     ┌─────────────────────────────────────┐
@@ -94,7 +96,7 @@ DhanMitra is a **voice-first, multilingual AI assistant** that speaks Hindi, Mar
 ### Backend
 
 ```bash
-cd "backend copy"
+cd backend
 python -m venv .venv
 .venv\Scripts\activate          # Windows
 pip install -r requirements.txt
@@ -124,7 +126,7 @@ Open **http://localhost:5173** — sign in, complete onboarding, and start chatt
 
 ```
 dhanmitra/
-├── backend copy/          # FastAPI + Agno agents
+├── backend/               # FastAPI + Agno agents
 │   ├── api/               # Routes: chat, profile, schemes, payments, telegram
 │   ├── agents/            # 5 AI agents + tools + LanceDB setup
 │   ├── services/          # Memory, Setu, Telegram, WhatsApp, scheduler

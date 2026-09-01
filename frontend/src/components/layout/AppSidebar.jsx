@@ -17,7 +17,7 @@ const navItems = [
   { icon: '🏆', label: 'Fitness Hub', path: '/fitness' },
   { icon: '🧪', label: 'UPI Sandbox', path: '/upi-sandbox' },
   { icon: '✈️', label: 'Telegram', path: '/settings' },
-  { icon: '📋', label: 'Schemes', path: '/schemes' },
+  { icon: '📋', label: 'Schemes', path: '/chat' },
 ];
 
 export function AppSidebar() {
@@ -33,7 +33,7 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {navItems.map((item) => (
-                <SidebarMenuItem key={item.path}>
+                <SidebarMenuItem key={item.label}>
                   <SidebarMenuButton asChild isActive={location.pathname === item.path}>
                     <Link to={item.path}>
                       <span className="text-xl">{item.icon}</span>

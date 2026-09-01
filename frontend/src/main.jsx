@@ -5,6 +5,7 @@ import { ClerkProvider } from '@clerk/clerk-react'
 import './index.css'
 import App from './App.jsx'
 import { UserProfileProvider } from './context/UserProfileContext.jsx'
+import { ToastProvider } from './context/ToastContext.jsx'
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
@@ -17,7 +18,9 @@ createRoot(document.getElementById('root')).render(
     <ClerkProvider publishableKey={PUBLISHABLE_KEY} afterSignOutUrl="/">
       <BrowserRouter>
         <UserProfileProvider>
-          <App />
+          <ToastProvider>
+            <App />
+          </ToastProvider>
         </UserProfileProvider>
       </BrowserRouter>
     </ClerkProvider>

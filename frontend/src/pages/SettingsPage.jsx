@@ -6,11 +6,13 @@ import { Badge } from '@/components/ui/badge';
 import { motion } from 'framer-motion';
 import { Send, Copy, Check, Link as LinkIcon, Unlink } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
+import { useToast } from '@/context/ToastContext';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 export default function SettingsPage() {
   const { user } = useUser();
+  const { addToast } = useToast();
   const [linkStatus, setLinkStatus] = useState(null);
   const [verificationCode, setVerificationCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -37,6 +39,7 @@ export default function SettingsPage() {
       setLinkStatus(data);
     } catch (error) {
       console.error('Failed to fetch link status:', error);
+      addToast('Could not check Telegram status', 'error');
     }
   };
 
@@ -57,17 +60,20 @@ export default function SettingsPage() {
       }
       setVerificationCode(data.verification_code);
       if (data.bot_username) setBotUsername(`@${data.bot_username}`);
+      addToast('Link code generated!', 'success');
     } catch (error) {
       console.error('Failed to generate link code:', error);
+      addToast(error.message || 'Failed to generate link code', 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
   const copyToClipboard = () => {
-    navigator.clipboard.writeText(verificationCode).catch((error) => {
-      console.error('Failed to copy link code:', error);
-    });
+    navigator.clipboard.writeText(verificationCode).then(
+      () => addToast('Copied to clipboard', 'success'),
+      () => addToast('Failed to copy', 'error')
+    );
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -91,8 +97,10 @@ export default function SettingsPage() {
       }
       setLinkStatus({ is_linked: false });
       setVerificationCode('');
+      addToast('Telegram account unlinked', 'success');
     } catch (error) {
       console.error('Failed to unlink account:', error);
+      addToast(error.message || 'Failed to unlink account', 'error');
     } finally {
       setIsLoading(false);
     }

@@ -90,10 +90,6 @@ export default function App() {
         }
       />
       <Route path="/upi-sandbox" element={<ProtectedRoute><OnboardingGate><UPISandboxPage /></OnboardingGate></ProtectedRoute>} />
-      <Route 
-        path="/settings" 
-        element={<ProtectedRoute><OnboardingGate><SettingsPage /></OnboardingGate></ProtectedRoute>} 
-      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
