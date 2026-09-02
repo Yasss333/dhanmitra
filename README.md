@@ -82,7 +82,7 @@ Eraser Link:https://app.eraser.io/workspace/VpJA1BFUFbMVJ6wI3kiT
 | **Frontend** | React 19, Vite 8, Tailwind CSS v4, shadcn/ui |
 | **Auth** | Clerk |
 | **Voice** | Web Speech API (browser), OpenAI Whisper (Telegram) |
-| **Payments** | Setu UPI Sandbox |
+| **Payments** | Razorpay (test mode) + Setu UPI Sandbox |
 | **Channels** | Web, Telegram Bot, WhatsApp |
 
 ---
@@ -103,7 +103,7 @@ python -m venv .venv
 pip install -r requirements.txt
 cp .env.example .env            # fill in your keys
 uvicorn main:app --reload --port 8000
-```cd f 
+```
 
 Seed schemes & vector DB:
 ```bash
@@ -148,8 +148,8 @@ dhanmitra/
 1. **User speaks or types** in their language (Hindi, Marathi, Kannada, English)
 2. **Agent Router** identifies intent — scam alert? budget help? scheme lookup?
 3. **Specialist agent** responds with personalized, occupation-aware advice
-4. **Mitra Insights Engine** extracts financial facts from the conversation and enriches future replies
-5. **Everything persists** — profiles, goals, conversation history in MongoDB
+4. **Persistent Memory Engine** extracts financial facts (income, expenses, goals, SIPs) from the conversation and saves them to your profile
+5. **Everything persists** — profiles, goals, SIPs, and conversation history in MongoDB; the chat resumes your last conversation like ChatGPT
 
 ---
 
