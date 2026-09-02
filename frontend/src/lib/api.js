@@ -91,3 +91,22 @@ export async function verifyRazorpayPayment({ razorpay_payment_id, razorpay_orde
   if (!res.ok) throw new Error(body?.detail || `HTTP ${res.status}`);
   return body;
 }
+
+// ----- Profile (Phase 3) -----
+
+export async function getProfile(userId) {
+  const res = await fetch(`${API_BASE}/api/profile/${encodeURIComponent(userId)}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+export async function saveProfile(body) {
+  const res = await fetch(`${API_BASE}/api/profile`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.detail || `HTTP ${res.status}`);
+  return data;
+}

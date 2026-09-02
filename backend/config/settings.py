@@ -33,3 +33,7 @@ SETU_ENVIRONMENT = os.getenv("SETU_ENVIRONMENT", "sandbox")  # sandbox | product
 # ----- Razorpay (Test Mode) -----
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
+
+# ----- Vapi (Voice AI) -----
+VAPI_PRIVATE_KEY = os.getenv("VAPI_PRIVATE_KEY")
+VAPI_ASSISTANT_ID = os.getenv("VAPI_ASSISTANT_ID")

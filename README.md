@@ -37,11 +37,12 @@ DhanMitra is a **voice-first, multilingual AI assistant** that speaks Hindi, Mar
 | 🛡️ | **Scam Guardian** | Detects fraud attempts and gives instant, urgent alerts in your language |
 | 🤖 | **5 AI Agents** | Specialist agents for scams, budgeting, govt schemes, stocks — orchestrated automatically |
 | 📊 | **RAG-Powered Schemes** | Semantic search across 7+ government schemes using hybrid vector + metadata pipeline |
-| 🎮 | **Financial Fitness** | Gamified quizzes with streaks, levels, and LLM-generated challenges |
-| 💳 | **UPI Integration** | Create payment links, mock transactions — all through Setu sandbox |
+| 🎮 | **Financial Fitness** | Gamified quizzes with daily streaks, levels, and difficulty-scaling LLM-generated challenges |
+| 💳 | **Payments** | Razorpay test-mode payment links + mock UPI flow, no real money |
 | 🗣️ | **Voice-First** | Tap-to-speak orb with browser STT/TTS for visually impaired users |
 | 📱 | **Multi-Channel** | Web app, Telegram bot, WhatsApp — all connected |
-| 🧠 | **Mitra Insights** | Auto-extracts your income, EMIs, goals from chat and enriches every reply |
+| 🧠 | **Persistent Memory** | Auto-extracts your income, expenses, goals & SIPs from chat and shows them in your profile |
+| 💬 | **Chat History** | Continues your last conversation like ChatGPT, with a sidebar to switch and start new chats |
 | 🧠 | **Yahoo Finance API** | Gives real time stock prices and comparions|
 
 ---
@@ -102,7 +103,7 @@ python -m venv .venv
 pip install -r requirements.txt
 cp .env.example .env            # fill in your keys
 uvicorn main:app --reload --port 8000
-```
+```cd f 
 
 Seed schemes & vector DB:
 ```bash

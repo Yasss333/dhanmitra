@@ -126,6 +126,30 @@ export default function HomeScreen() {
         </div>
       </div>
 
+      {/* QUICK FACTS (Phase 3) */}
+      {(data?.monthly_income || data?.monthly_expenses || data?.savings_goal_amount || data?.goals?.length > 0 || data?.loans?.length > 0) && (
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          {data.monthly_income && (
+            <span className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-600 shadow-sm">💰 Income: ₹{Number(data.monthly_income).toLocaleString('en-IN')}</span>
+          )}
+          {data.monthly_expenses && (
+            <span className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-600 shadow-sm">🧾 Expenses: ₹{Number(data.monthly_expenses).toLocaleString('en-IN')}</span>
+          )}
+          {data.savings_goal_amount && (
+            <span className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-600 shadow-sm">🎯 Goal: ₹{Number(data.savings_goal_amount).toLocaleString('en-IN')}</span>
+          )}
+          {(data.goals || []).slice(0, 2).map((g) => (
+            <span key={g} className="px-3 py-1.5 bg-orange-50 border border-orange-200 rounded-lg text-xs text-orange-700 shadow-sm">🎯 {g}</span>
+          ))}
+          <button
+            onClick={() => navigate('/profile')}
+            className="ml-auto px-3 py-1.5 text-xs font-medium text-orange-600 hover:text-orange-700 hover:underline"
+          >
+            Edit profile →
+          </button>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
         {/* FITNESS GAUGE */}
@@ -225,7 +249,7 @@ export default function HomeScreen() {
               {profile?.occupation === 'homemaker' && 'PM Ujjwala — free LPG connection'}
               {!profile?.occupation && 'Check eligibility for government schemes'}
             </h4>
-            <button className="text-orange-600 text-sm font-medium hover:underline mt-1">Check now →</button>
+            <span className="text-orange-600 text-sm font-medium mt-1 inline-block">Check now →</span>
           </div>
         </Card>
 
@@ -252,10 +276,10 @@ export default function HomeScreen() {
 
       </div>
 
-      {/* FAB */}
+      {/* FAB — always opens Voice Orb for voice-first experience */}
       <Button 
         className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white text-2xl shadow-xl shadow-orange-500/40 hover:shadow-2xl hover:shadow-orange-500/50 hover:scale-110 transition-all duration-300"
-        onClick={() => navigate('/chat')}
+        onClick={() => navigate('/orb')}
       >
         🎤
       </Button>

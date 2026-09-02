@@ -2,9 +2,11 @@ from agno.tools import tool
 from db.mongo import get_collection
 from agents.agno_setup import get_vector_store
 import json
+import uuid
 import yfinance as yf
 from services.setu_service import setu_service
-from datetime import datetime, timezone
+from services.razorpay_service import create_order as razorpay_create_order
+from datetime import datetime, timezone, timedelta
 
 @tool
 def get_user_profile(user_id: str) -> dict:
@@ -14,6 +16,74 @@ def get_user_profile(user_id: str) -> dict:
     col = get_collection("users")
     doc = col.find_one({"user_id": user_id}, {"_id": 0})
     return doc or {"occupation": "other", "language": "english", "money_comfort": "beginner"}
+
+
+@tool
+def update_user_memory(
+    user_id: str,
+    monthly_income: int = None,
+    monthly_expenses: int = None,
+    savings_goal_amount: int = None,
+    goal: str = None,
+    notes: str = None,
+    goals: list[str] = None,
+) -> dict:
+    """
+    THE PERSISTENT MEMORY TOOL. Call this whenever the user tells you something about
+    their money that should be remembered and shown in their profile:
+      - their monthly salary / income  -> monthly_income (rupees)
+      - their monthly expenses / rent  -> monthly_expenses (rupees)
+      - a savings goal amount           -> savings_goal_amount (rupees)
+      - a named goal (e.g. 'emergency fund', 'new house') -> goal (single) or goals (list)
+      - any key financial note          -> notes
+    Only pass the fields the user actually mentioned. Returns the updated profile fields.
+    """
+    if not user_id or user_id == "anonymous":
+        return {"success": False, "error": "No user_id provided to persist memory."}
+
+    from datetime import datetime
+    col = get_collection("users")
+    existing = col.find_one({"user_id": user_id})
+    existing = existing or {}
+
+    updates = {}
+    if monthly_income is not None:
+        updates["monthly_income"] = int(monthly_income)
+    if monthly_expenses is not None:
+        updates["monthly_expenses"] = int(monthly_expenses)
+    if savings_goal_amount is not None:
+        updates["savings_goal_amount"] = int(savings_goal_amount)
+    if goal:
+        # Promote the single named goal into the goals list (dedupe, keep newest)
+        new_goal = str(goal).strip()
+        if new_goal:
+            current_goals = list(existing.get("goals") or [])
+            if new_goal not in current_goals:
+                current_goals.append(new_goal)
+            updates["goals"] = current_goals
+    if goals:
+        current_goals = list(existing.get("goals") or [])
+        for g in goals:
+            g = str(g).strip()
+            if g and g not in current_goals:
+                current_goals.append(g)
+        updates["goals"] = current_goals
+    if notes:
+        current_notes = existing.get("notes") or ""
+        sep = "\n" if current_notes else ""
+        updates["notes"] = current_notes + sep + str(notes).strip()
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    if updates:
+        # users collection has a legacy unique index on userId; setting both identifiers
+        # avoids creating userId=null docs that collide under that index.
+        col.update_one(
+            {"user_id": user_id},
+            {"$set": {**updates, "userId": user_id, "user_id": user_id}},
+            upsert=True,
+        )
+
+    return {"success": True, "updated": {k: v for k, v in updates.items() if k != "updated_at"}}
 
 @tool
 def search_schemes(query: str, occupation: str = "other") -> list:
@@ -175,8 +245,135 @@ async def create_upi_payment_request(amount: int, purpose: str, user_id: str, se
             "error": f"Failed to create payment request: {str(e)}"
         }
 
+
+FREQUENCY_DAYS = {"weekly": 7, "monthly": 30, "quarterly": 92, "yearly": 365}
+
+
 @tool
-def apply_mitra_insights(draft_reply: str, profile: dict) -> str:
+def create_razorpay_order(amount: int, purpose: str, user_id: str, session_id: str) -> dict:
+    """
+    Create a one-time Razorpay sandbox order (test mode, no real money).
+    Called by the agent when the user wants to save, pay, top-up, or invest a specific amount.
+
+    Args:
+        amount: Amount in rupees (e.g., 500 for ₹500; minimum ₹1)
+        purpose: Description of what the payment is for
+        user_id: The user's ID
+        session_id: The current chat session ID
+    """
+    try:
+        if amount <= 0:
+            return {"success": False, "error": "Amount must be greater than 0"}
+        if amount > 100000:
+            return {"success": False, "error": "Amount exceeds demo limit of ₹1,00,000"}
+
+        order = razorpay_create_order(amount * 100, purpose, user_id or "anonymous", session_id or "default")
+
+        return {
+            "success": True,
+            "gateway": "razorpay",
+            "kind": "one_time",
+            "order_id": order["order_id"],
+            "amount": amount,
+            "amount_paise": order["amount_paise"],
+            "currency": order["currency"],
+            "purpose": purpose,
+            "message": f"A payment request for ₹{amount} has been created ({purpose}).",
+        }
+    except Exception as e:
+        return {"success": False, "error": f"Failed to create order: {str(e)}"}
+
+
+@tool
+def start_sip(amount: int, frequency: str, purpose: str, user_id: str, session_id: str) -> dict:
+    """
+    Record a recurring SIP (Systematic Investment Plan) and create the FIRST installment
+    as a Razorpay sandbox order. Used when the user wants to invest or save periodically
+    (weekly / monthly / quarterly / yearly).
+
+    Args:
+        amount: Amount per installment in rupees
+        frequency: One of weekly, monthly, quarterly, yearly
+        purpose: What the SIP is for (e.g., 'Mutual Fund - ELSS')
+        user_id: The user's ID
+        session_id: The current chat session ID
+    """
+    try:
+        if amount <= 0:
+            return {"success": False, "error": "Amount must be greater than 0"}
+        if amount > 100000:
+            return {"success": False, "error": "Amount exceeds demo limit of ₹1,00,000"}
+        normalized_frequency = (frequency or "monthly").strip().lower()
+        if normalized_frequency not in FREQUENCY_DAYS:
+            return {"success": False, "error": f"Frequency must be one of {list(FREQUENCY_DAYS.keys())}"}
+
+        plan_id = f"sip-{uuid.uuid4().hex[:8]}"
+        next_date = datetime.now(timezone.utc) + timedelta(days=FREQUENCY_DAYS[normalized_frequency])
+
+        get_collection("sip_plans").update_one(
+            {"plan_id": plan_id},
+            {
+                "$set": {
+                    "plan_id": plan_id,
+                    "user_id": user_id or "anonymous",
+                    "session_id": session_id or "default",
+                    "amount": amount,
+                    "frequency": normalized_frequency,
+                    "purpose": purpose,
+                    "status": "active",
+                    "next_date": next_date.isoformat(),
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }
+            },
+            upsert=True,
+        )
+
+        # Also link the SIP into the user's profile so it appears in their profile section
+        if user_id and user_id != "anonymous":
+            sip_entry = {
+                "plan_id": plan_id,
+                "amount": amount,
+                "frequency": normalized_frequency,
+                "purpose": purpose,
+                "status": "active",
+                "next_date": next_date.isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            get_collection("users").update_one(
+                {"user_id": user_id},
+                {
+                    "$set": {
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                        "userId": user_id,
+                        "user_id": user_id,
+                    },
+                    "$push": {"sips": sip_entry},
+                },
+                upsert=True,
+            )
+
+        # First installment = a real test-mode Razorpay order
+        first_order = razorpay_create_order(amount * 100, f"{purpose} (first installment)", user_id or "anonymous", session_id or "default")
+
+        return {
+            "success": True,
+            "gateway": "razorpay",
+            "kind": "sip",
+            "plan_id": plan_id,
+            "amount": amount,
+            "frequency": normalized_frequency,
+            "purpose": purpose,
+            "order_id": first_order["order_id"],
+            "amount_paise": first_order["amount_paise"],
+            "currency": first_order["currency"],
+            "next_date": next_date.isoformat(),
+            "message": f"SIP of ₹{amount} {normalized_frequency} created for {purpose}. First installment is ready to pay.",
+        }
+    except Exception as e:
+        return {"success": False, "error": f"Failed to start SIP: {str(e)}"}
+
+@tool
+def apply_mitra_insights(draft_reply: str, profile: dict[str, object]) -> str:
     """
     The Heart of DhanMitra. Enriches a draft reply with rupee comparisons,
     risk flags, and savings impact based on the user's money_comfort level.

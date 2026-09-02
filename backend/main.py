@@ -7,6 +7,7 @@ from api.profile import router as profile_router
 from api.schemes import router as schemes_router
 from api.payments import router as payments_router
 from api.razorpay_payments import router as razorpay_router
+from api.voice import router as voice_router
 from services.scheduler import start_scheduler, stop_scheduler
 from api.telegram import router as telegram_router
 from api.telegram_link import router as telegram_link_router
@@ -40,6 +41,7 @@ app.include_router(payments_router, prefix="/api")
 app.include_router(razorpay_router, prefix="/api")
 app.include_router(telegram_router, prefix="/api")
 app.include_router(telegram_link_router, prefix="/api")
+app.include_router(voice_router, prefix="/api")
 
 @app.get("/health")
 async def health():

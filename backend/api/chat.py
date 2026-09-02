@@ -1,11 +1,110 @@
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
+import re
 from services.memory import get_recent_messages, append_message, get_session_messages, get_user_sessions
 from agents.agno_agents import AgentRouter
 from services.whatsapp_service import whatsapp_service
+from services.payment_payloads import resolve_payment_payload
 
 router = APIRouter()
+
+# ──────────────────────────────────────────────────────────────
+# PERSISTENT MEMORY – HEURISTIC FALLBACK
+# Extracts financial facts the user mentions (income, expenses,
+# savings goal, named goal) and writes them to the user's profile
+# in MongoDB. Runs in addition to the LLM 'update_user_memory' tool,
+# so memory is captured even if the model forgets to call the tool.
+# ──────────────────────────────────────────────────────────────
+
+MONTHLY_INCOME_PATTERNS = [
+    r"(?:my\s+)?(?:monthly\s+)?salary\s+(?:is|of|=\s*)?\s*(?:₹|rs\.?|inr)?\s*([\d,]+(?:\s*[kK])?)",
+    r"(?:i\s+)?(?:earn|make|get)\s+(?:about\s+)?(?:₹|rs\.?|inr)?\s*([\d,]+(?:\s*[kK])?)\s*(?:per\s+month|monthly|a\s+month)",
+    r"income\s+(?:is|of)\s+(?:₹|rs\.?|inr)?\s*([\d,]+(?:\s*[kK])?)",
+]
+EXPENSE_PATTERNS = [
+    r"(?:my\s+)?(?:monthly\s+)?(?:expenses|spending|expenditure)\s+(?:are|is|of)\s+(?:₹|rs\.?|inr)?\s*([\d,]+(?:\s*[kK])?)",
+    r"(?:i\s+)?(?:spend|spend\s+about)\s+(?:₹|rs\.?|inr)?\s*([\d,]+(?:\s*[kK])?)\s*(?:per\s+month|monthly)",
+]
+GOAL_AMOUNT_PATTERNS = [
+    r"(?:savings\s+)?goal\s+(?:amount\s+)?(?:is|of)\s+(?:₹|rs\.?|inr)?\s*([\d,]+(?:\s*[kK])?)",
+    r"(?:want|need|save|build)\s+(?:a|an|to|up)?\s*(?:₹|rs\.?|inr)?\s*([\d,]+(?:\s*[kK])?)\s*(?:emergency\s+fund|corpus|goal)?",
+]
+GOAL_KEYWORDS = ["emergency fund", "new house", "buy a house", "retirement", "education fund", "trip", "vacation", "wedding", "car", "house"]
+GOAL_NAME_PATTERNS = [
+    r"(?:want|plan|goal|build|save for|create|set up|target).*?\b(" + "|".join(g.replace(" ", r"\s+") for g in GOAL_KEYWORDS) + r")\b"
+]
+
+
+def _parse_amount(raw: str):
+    if not raw:
+        return None
+    raw = raw.strip().replace(",", "")
+    mult = 1000 if raw.endswith(("k", "K")) else 1
+    if raw.endswith(("k", "K")):
+        raw = raw[:-1]
+    try:
+        return int(float(raw) * mult)
+    except ValueError:
+        return None
+
+
+def persist_memory_from_message(user_id: str, message: str):
+    """Extract financial facts from a user message and save them to the user's profile."""
+    if not user_id or user_id == "anonymous" or not message:
+        return
+
+    from db.mongo import get_collection
+    from datetime import datetime, timezone
+    col = get_collection("users")
+    existing = col.find_one({"user_id": user_id}) or {}
+
+    updates = {}
+    text = message.lower()
+
+    for pat in MONTHLY_INCOME_PATTERNS:
+        m = re.search(pat, text)
+        if m:
+            val = _parse_amount(m.group(1))
+            if val:
+                updates["monthly_income"] = val
+            break
+
+    for pat in EXPENSE_PATTERNS:
+        m = re.search(pat, text)
+        if m:
+            val = _parse_amount(m.group(1))
+            if val:
+                updates["monthly_expenses"] = val
+            break
+
+    for pat in GOAL_AMOUNT_PATTERNS:
+        m = re.search(pat, text)
+        if m:
+            val = _parse_amount(m.group(1))
+            if val:
+                updates["savings_goal_amount"] = val
+            break
+
+    for pat in GOAL_NAME_PATTERNS:
+        m = re.search(pat, text)
+        if m:
+            name = m.group(1).strip()
+            goals = list(existing.get("goals") or [])
+            if name not in goals:
+                goals.append(name)
+            updates["goals"] = goals
+            break
+
+    if updates:
+        updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+        # users collection has a legacy unique index on userId; set both to avoid null collisions
+        col.update_one(
+            {"user_id": user_id},
+            {"$set": {**updates, "userId": user_id, "user_id": user_id}},
+            upsert=True,
+        )
+        print(f"[MEMORY] Persisted for {user_id}: {list(updates.keys())}")
 
 class ChatRequest(BaseModel):
     message: str
@@ -26,6 +125,9 @@ async def process_chat(req: ChatRequest) -> dict:
     try:
         profile = req.profile or {}
         history = get_recent_messages(req.session_id)
+
+        # Persistent memory: capture financial facts (income, expenses, goal) from chat
+        persist_memory_from_message(req.user_id or "anonymous", req.message)
 
         # Call Agno Router with full context
         response = await AgentRouter.arun(
@@ -66,8 +168,19 @@ async def process_chat(req: ChatRequest) -> dict:
         if risk_flag:
             agent_trace["risk_flag"] = risk_flag
 
+        # Structured payment payload for in-chat Razorpay checkout cards (Phase 2)
+        payload, used_fallback = resolve_payment_payload(
+            response, req.message, req.user_id, req.session_id
+        )
+        if payload:
+            payload["session_id"] = req.session_id
+            payload["user_id"] = req.user_id or "anonymous"
+            if used_fallback:
+                reply = f"{reply}\n\nI've prepared a demo checkout for this — tap the card below to complete it."
+
         return {
             "reply": reply,
+            "payment": payload,
             "agent_trace": agent_trace,
             "routing": {
                 "agents": [delegated_agent],

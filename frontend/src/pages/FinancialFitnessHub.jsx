@@ -30,7 +30,11 @@ export default function FinancialFitnessHub() {
     setAnswered(false);
     try {
       const data = await sendChatMessage({
-        message: "Give me a financial fitness challenge based on my profile. Return ONLY JSON.",
+        message: `Give me a NEW financial fitness challenge for a user at level "${level}" with score ${score}/200.
+Do NOT reuse any scenario you have given this user before — make every question a fresh, original scenario.
+The question difficulty should grow with the level: Beginner = basic budgeting/saving, Aware = investing/tax basics, Champion = advanced investing/estate planning.
+Return ONLY JSON with no markdown, in exactly this shape:
+{"scenario":"...", "options":["...","...","...","..."], "correctIndex":<number 0-3>, "explanation":"..."}`,
         mode: 'sahayak',
         session_id: `fitness-${user?.id}-${Date.now()}`,
         user_id: user?.id || 'anonymous',
@@ -45,12 +49,12 @@ export default function FinancialFitnessHub() {
         parsed = JSON.parse(clean);
       } catch (e) {
         // Fallback: If LLM fails, use a default static question
-        parsed = {
-          scenario: "You earn ₹4,200/week. Rent ₹3,000, essentials ₹800. What do you do with ₹400 left?",
-          options: ["Spend it", "Put it in savings", "Borrow more", "Don't track it"],
-          correctIndex: 1,
-          explanation: "Saving small amounts consistently builds an emergency buffer."
-        };
+        const fallbacks = [
+          { scenario: "You earn ₹4,200/week. Rent ₹3,000, essentials ₹800. What do you do with ₹400 left?", options: ["Spend it", "Put it in savings", "Borrow more", "Don't track it"], correctIndex: 1, explanation: "Saving small amounts consistently builds an emergency buffer." },
+          { scenario: "You get a surprise ₹5,000 bonus at work. Best first move?", options: ["Treat yourself", "Add it to your emergency fund", "Buy new shoes", "Lend it to a friend"], correctIndex: 1, explanation: "Building your emergency cushion before spending is the safest practice." },
+          { scenario: "Your salary is processed monthly. When is the best time to auto-invest?", options: ["At month end", "Right after salary arrives", "Never", "Only when market is up"], correctIndex: 1, explanation: "Investing right after payday follows the 'pay yourself first' rule." },
+        ];
+        parsed = fallbacks[Math.floor(Math.random() * fallbacks.length)];
       }
       setChallenge(parsed);
     } catch (error) {
@@ -69,19 +73,41 @@ export default function FinancialFitnessHub() {
     setAnswered(true);
 
     const isCorrect = index === challenge.correctIndex;
-    const newScore = isCorrect ? score + 10 : score;
-    const newStreak = isCorrect ? streak + 1 : 0;
-    const newLevel = newScore >= 200 ? 'Champion' : newScore >= 100 ? 'Aware' : 'Beginner';
+    const today = new Date().toISOString().slice(0, 10);
+    const lastDate = profile.fitnessLastDate || localStorage.getItem('dm_fitness_last_date') || null;
+
+    let newScore = score;
+    let newStreak = streak;
+    let newLevel = level;
+
+    if (isCorrect) {
+      newScore = score + 10;
+      newLevel = newScore >= 200 ? 'Champion' : newScore >= 100 ? 'Aware' : 'Beginner';
+
+      // Streak counts once per calendar day (never multiple times on the same day)
+      if (lastDate !== today) {
+        const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+        newStreak = lastDate === yesterday ? streak + 1 : 1;
+      }
+    }
+    // Wrong answer: keep the streak as-is and allow a same-level retry question.
 
     setScore(newScore);
     setStreak(newStreak);
     setLevel(newLevel);
+
+    try {
+      localStorage.setItem('dm_fitness_last_date', today);
+    } catch {
+      /* ignore */
+    }
 
     // Update the backend profile
     updateProfile({
       fitnessScore: newScore,
       fitnessStreak: newStreak,
       fitnessLevel: newLevel,
+      fitnessLastDate: today,
     });
 
     // Send update to MongoDB via profile endpoint
@@ -93,6 +119,7 @@ export default function FinancialFitnessHub() {
         fitnessScore: newScore,
         fitnessStreak: newStreak,
         fitnessLevel: newLevel,
+        fitnessLastDate: today,
       }),
     }).catch(err => console.error("Profile update failed:", err));
   };

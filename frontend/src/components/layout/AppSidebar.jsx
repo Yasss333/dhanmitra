@@ -14,6 +14,7 @@ import {
 const navItems = [
   { icon: '🏠', label: 'Home', path: '/home' },
   { icon: '💬', label: 'Chat', path: '/chat' },
+  { icon: '🎙️', label: 'Voice Orb', path: '/orb' },
   { icon: '🏆', label: 'Fitness Hub', path: '/fitness' },
   { icon: '🧪', label: 'UPI Sandbox', path: '/upi-sandbox' },
   { icon: '✈️', label: 'Telegram', path: '/settings' },
@@ -49,9 +50,11 @@ export function AppSidebar() {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton>
-              <span className="text-lg">👤</span>
-              <span>Profile</span>
+            <SidebarMenuButton asChild isActive={location.pathname === '/profile'}>
+              <Link to="/profile">
+                <span className="text-lg">👤</span>
+                <span>Profile</span>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

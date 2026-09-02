@@ -1,21 +1,13 @@
-import hashlib
-import hmac
-from datetime import datetime, timezone
-
-import razorpay
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from config.settings import RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
-from db.mongo import get_collection
+from services.razorpay_service import create_order, mark_paid, verify_signature
 
 router = APIRouter(prefix="/razorpay", tags=["razorpay"])
 
 if not RAZORPAY_KEY_ID or not RAZORPAY_KEY_SECRET:
     raise RuntimeError("RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET missing from environment")
-
-client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
-client.set_app_details({"title": "DhanMitra", "version": "1.0.0"})
 
 
 class CreateOrderRequest(BaseModel):
@@ -34,66 +26,29 @@ class VerifyPaymentRequest(BaseModel):
 
 
 @router.post("/create-order")
-async def create_order(req: CreateOrderRequest):
+async def create_order_endpoint(req: CreateOrderRequest):
     """Create a Razorpay order. Amount is in paise (₹1 = 100 paise)."""
-    receipt = f"DM-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}-{req.user_id[:8]}"
     try:
-        order = client.order.create(
-            {
-                "amount": req.amount,
-                "currency": "INR",
-                "receipt": receipt,
-                "notes": {"purpose": req.purpose, "session_id": req.session_id, "user_id": req.user_id},
-            }
-        )
+        return await _create_order(req)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Razorpay order creation failed: {str(e)}")
 
-    # Persist locally
-    record = {
-        "order_id": order["id"],
-        "amount": req.amount,
-        "currency": "INR",
-        "receipt": receipt,
-        "purpose": req.purpose,
-        "user_id": req.user_id,
-        "session_id": req.session_id,
-        "gateway": "razorpay",
-        "status": "CREATED",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    get_collection("payments").update_one({"order_id": order["id"]}, {"$set": record}, upsert=True)
 
-    return {"order_id": order["id"], "amount": order["amount"], "currency": order["currency"]}
+async def _create_order(req: CreateOrderRequest):
+    order = create_order(req.amount, req.purpose, req.user_id, req.session_id)
+    return {"order_id": order["order_id"], "amount": order["amount"], "currency": order["currency"]}
 
 
 @router.post("/verify-payment")
-async def verify_payment(req: VerifyPaymentRequest):
+async def verify_payment_endpoint(req: VerifyPaymentRequest):
     """Verify Razorpay payment signature (HMAC-SHA256)."""
     if not all([req.razorpay_payment_id, req.razorpay_order_id, req.razorpay_signature]):
         raise HTTPException(status_code=400, detail="Missing payment fields")
 
-    expected = hmac.new(
-        RAZORPAY_KEY_SECRET.encode("utf-8"),
-        f"{req.razorpay_order_id}|{req.razorpay_payment_id}".encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
-
-    if not hmac.compare_digest(expected, req.razorpay_signature):
+    if not verify_signature(req.razorpay_order_id, req.razorpay_payment_id, req.razorpay_signature):
         raise HTTPException(status_code=400, detail="Payment signature verification failed. Do NOT mark as paid.")
 
     # Signature valid → mark paid
-    get_collection("payments").update_one(
-        {"order_id": req.razorpay_order_id},
-        {
-            "$set": {
-                "status": "PAID",
-                "razorpay_payment_id": req.razorpay_payment_id,
-                "razorpay_signature": req.razorpay_signature,
-                "paid_at": datetime.now(timezone.utc).isoformat(),
-            }
-        },
-        upsert=False,
-    )
+    mark_paid(req.razorpay_order_id, req.razorpay_payment_id, req.razorpay_signature)
 
     return {"success": True, "message": "Payment verified successfully", "razorpay_payment_id": req.razorpay_payment_id}

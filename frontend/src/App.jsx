@@ -8,6 +8,7 @@ import ChatPage from './pages/ChatPage'
 import VoiceOrb from './pages/VoiceOrb'
 import UPISandboxPage from './pages/UPISandboxPage'
 import SettingsPage from './pages/SettingsPage'
+import ProfilePage from './pages/ProfilePage'
 import { useUserProfile } from './context/UserProfileContext'
 
 function ProtectedRoute({ children }) {
@@ -23,7 +24,6 @@ function OnboardingGate({ children }) {
   const { profile, profileLoaded } = useUserProfile()
   if (!profileLoaded) return null
   if (!profile.onboardingComplete) return <Navigate to="/onboarding" replace />
-  if (profile.accessibilityMode === 'voice_only') return <Navigate to="/orb" replace />
   return children
 }
 
@@ -77,6 +77,16 @@ export default function App() {
           <ProtectedRoute>
             <OnboardingGate>
               <SettingsPage />
+            </OnboardingGate>
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <OnboardingGate>
+              <ProfilePage />
             </OnboardingGate>
           </ProtectedRoute>
         }
