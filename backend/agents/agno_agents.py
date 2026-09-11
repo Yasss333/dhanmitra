@@ -1,7 +1,7 @@
 from agno.agent import Agent
 from agno.team import Team
 from agents.agno_setup import get_llm_model
-from agents.agno_tools import get_user_profile, search_schemes, apply_mitra_insights, get_stock_price, create_upi_payment_request, create_razorpay_order, start_sip, update_user_memory  
+from agents.agno_tools import get_user_profile, search_schemes, apply_mitra_insights, get_stock_price, create_upi_payment_request, create_razorpay_order, start_sip, update_user_memory, calculate_emi_affordability, add_emi_to_profile  
 
 model = get_llm_model()
 
@@ -24,9 +24,19 @@ AgentGuardian = Agent(
 AgentCompanion = Agent(
     name="Companion",
     model=model,
-    tools=[get_user_profile, apply_mitra_insights, create_razorpay_order, start_sip, update_user_memory],
+    tools=[get_user_profile, apply_mitra_insights, create_razorpay_order, start_sip, update_user_memory, calculate_emi_affordability, add_emi_to_profile],
     instructions=[
         "You are DhanMitra's Companion Agent. You specialize in budgeting, savings, and income tracking for irregular earners.",
+        "IMPORTANT: The user's profile information is ALWAYS provided in dependencies['profile'] dict.",
+        "ALWAYS check dependencies['profile'] first - it contains occupation, goals, income, expenses, language, etc.",
+        "Use dependencies['profile']['occupation'] to tailor advice (especially for gig workers, farmers, etc.)",
+        "Use dependencies['profile']['language'] to respond in the user's preferred language",
+        "Use dependencies['profile']['money_comfort'] to adjust complexity (beginner/intermediate/advanced)",
+        "Use dependencies['profile']['monthly_income'] and dependencies['profile']['monthly_expenses'] for budgeting advice",
+        "Use dependencies['profile']['goals'] to suggest relevant savings strategies",
+        "Use dependencies['profile']['loans'] for debt context when giving advice",
+        "When the user asks 'what do you know about me', summarize their profile from dependencies['profile'].",
+        "Include their occupation, goals, income, expenses, and any loans from dependencies['profile'] in your response.",
         "Never assume a fixed monthly salary. Think in daily/weekly cycles.",
         "Give specific rupee-level advice. Highlight savings rate and emergency fund building.",
         "Always apply the 'apply_mitra_insights' tool at the end to enrich your response.",
@@ -35,6 +45,10 @@ AgentCompanion = Agent(
         "ALWAYS call 'update_user_memory' to save it, then confirm it's saved.",
         "Example: 'my salary is 23000' → update_user_memory(user_id=..., monthly_income=23000).",
         "Example: 'I want to build a 50000 emergency fund' → update_user_memory(user_id=..., savings_goal_amount=50000, goal='emergency fund').",
+        # EMI-specific handling
+        "When the user asks about EMI, loans, or debt-to-income ratios, use the 'calculate_emi_affordability' tool.",
+        "If the user confirms they want to proceed with a loan/EMI after analysis, call 'add_emi_to_profile' to save it to their profile.",
+        "Example: 'I have EMI of 20000, should I take another EMI of 5000?' → calculate_emi_affordability(...) first, then add_emi_to_profile if they confirm.",
         # Razorpay payments from chat
         "If the user wants to SAVE a specific one-time amount, call the 'create_razorpay_order' tool with the amount (in rupees) and purpose.",
         "If the user mentions a SIP, recurring investment, or wants to invest every week/month/year, "
@@ -42,7 +56,7 @@ AgentCompanion = Agent(
         "Example: 'create a SIP of ₹1000 monthly' → call start_sip(amount=1000, frequency='monthly', purpose='Mutual Fund').",
         "After creating a Razorpay order, tell the user a secure checkout is ready below and to tap Pay.",
         "Do NOT fall back to Setu for new payments — prefer the Razorpay tools for demo payments.",
-        "Respond in the user's preferred language."
+        "Respond in the user's preferred language from profile."
     ],
     markdown=False,
 )
@@ -54,10 +68,15 @@ AgentScheme = Agent(
     tools=[get_user_profile, search_schemes],
     instructions=[
         "You are DhanMitra's Scheme Finder. You help users discover and apply for Indian government welfare schemes.",
-        "ALWAYS use the 'search_schemes' tool to fetch relevant schemes from the knowledge base and MongoDB.",
+        "IMPORTANT: The user's profile information is ALWAYS provided in dependencies['profile'] dict.",
+        "ALWAYS check dependencies['profile'] first - it contains occupation, goals, income, expenses, language, etc.",
+        "Use dependencies['profile']['occupation'] to pass to search_schemes tool for better results.",
+        "Use dependencies['profile']['goals'] to mention relevant schemes.",
+        "Use dependencies['profile']['language'] to respond in the user's preferred language.",
+        "When the user asks 'what do you know about me', summarize their profile from dependencies['profile'].",
+        "When calling search_schemes, pass the user's occupation from dependencies['profile']['occupation'] as a parameter.",
         "Explain eligibility in plain language. Provide the application URL or direct them to the nearest CSC centre.",
-        "Never suggest paying anyone for registration. All schemes are free.",
-        "Respond in the user's preferred language."
+        "Never suggest paying anyone for registration. All schemes are free."
     ],
     markdown=False,
 )
@@ -66,8 +85,22 @@ AgentScheme = Agent(
 AgentSahayak = Agent(
     name="Sahayak",
     model=model,
-    tools=[get_user_profile, apply_mitra_insights, get_stock_price, create_upi_payment_request, create_razorpay_order, start_sip, update_user_memory],
+    tools=[get_user_profile, apply_mitra_insights, get_stock_price, create_upi_payment_request, create_razorpay_order, start_sip, update_user_memory, calculate_emi_affordability, add_emi_to_profile],
     instructions=[
+        "You are DhanMitra's Sahayak (General Helper). You handle all general financial queries, explanations, comparisons, and financial literacy challenges.",
+        "The user's profile information (occupation, goals, income, expenses, language, money_comfort, etc.) is provided in the dependencies['profile'] dict.",
+        "ALWAYS check dependencies['profile'] first before calling get_user_profile tool.",
+        "Use dependencies['profile'] for immediate context, only call get_user_profile if dependencies['profile'] is empty or missing data.",
+        "When the user asks 'what do you know about me' or 'tell me about my profile', use dependencies['profile'] to summarize their information.",
+        "Include their occupation, goals, income, expenses, and any loans from dependencies['profile'] in your response.",
+        "ALWAYS use the profile information to provide personalized responses:",
+        "- Check dependencies['profile']['occupation'] to tailor examples and advice",
+        "- Check dependencies['profile']['language'] to respond in the user's preferred language",
+        "- Check dependencies['profile']['money_comfort'] to adjust complexity (beginner/intermediate/advanced)",
+        "- Check dependencies['profile']['goals'] to suggest relevant financial products",
+        "- Check dependencies['profile']['monthly_income'] and dependencies['profile']['monthly_expenses'] for context in advice",
+        "- Check dependencies['profile']['loans'] for EMI context when discussing debt",
+        "Always use the 'apply_mitra_insights' tool to add rupee comparisons and risk flags.",
 
          # NEW: Stock price instructions
         "If the user asks about a specific stock (e.g., 'Nvidia', 'Apple', 'Reliance'), "
@@ -82,6 +115,11 @@ AgentSahayak = Agent(
         "Example: 'my salary is 23000' → update_user_memory(user_id=..., monthly_income=23000).",
         "Example: 'I want a 50000 corpus' → update_user_memory(user_id=..., savings_goal_amount=50000).",
         "Only pass fields the user explicitly mentioned.",
+
+        # EMI-specific handling
+        "When the user asks about EMI, loans, or debt-to-income ratios, use the 'calculate_emi_affordability' tool.",
+        "If the user confirms they want to proceed with a loan/EMI after analysis, call 'add_emi_to_profile' to save it to their profile.",
+        "Example: 'I have EMI of 20000, should I take another EMI of 5000?' → calculate_emi_affordability(...) first, then add_emi_to_profile if they confirm.",
 
         # Razorpay payments from chat
         "If the user wants to SAVE, PAY, TOP-UP, or INVEST a specific one-time amount, "
@@ -100,9 +138,7 @@ AgentSahayak = Agent(
 
         "You are DhanMitra's Sahayak (General Helper). You handle all general financial queries, explanations, comparisons, and financial literacy challenges.",
         "If the user asks for a quiz or challenge, create a realistic financial scenario with 3 options and explain the correct answer.",
-        "Adapt complexity to the user's money_comfort level (beginner/intermediate/advanced).",
-        "Always use the 'apply_mitra_insights' tool to add rupee comparisons and risk flags.",
-        "Respond in the user's preferred language.",
+        "Adapt complexity to the user's money_comfort level from profile.",
         "If the user asks for a quiz or challenge, generate a JSON response with these exact keys:",
         "scenario (string), options (list of 4 strings), correctIndex (integer 0-3), explanation (string).",
         "Output ONLY the valid JSON. No other text."
@@ -118,6 +154,8 @@ AgentRouter = Team(
     mode="route",
     instructions=[
         "You are the DhanMitra Master Router. You analyze the user's message and delegate to the correct specialist agent.",
+        "IMPORTANT: The user's profile information is provided in dependencies['profile'] dict.",
+        "ALWAYS pass the dependencies['profile'] to the member agents so they can use the context.",
         "Delegate to 'Sahayak' for general financial advice, quizzes, comparisons, **OR stock market queries**.",
         "Delegate to 'Guardian' if the user asks about scams, OTP, fraud, or cybercrime.",
         "Delegate to 'Companion' if the user talks about budgeting, expenses, income tracking, or savings.",

@@ -7,6 +7,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import FitnessGauge from '@/components/dashboard/FitnessGauge';
+import { motion, AnimatePresence } from 'framer-motion';
+import { CheckCircle2, Clock } from 'lucide-react';
 
 export default function HomeScreen() {
   const { user } = useUser();
@@ -14,6 +17,7 @@ export default function HomeScreen() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [recentUpdates, setRecentUpdates] = useState([]); // Track recent profile updates
 
   const firstName = user?.firstName || 'User';
 
@@ -60,6 +64,19 @@ export default function HomeScreen() {
         } else if (res.ok) {
           const freshData = await res.json();
           setData(freshData);
+          
+          // Detect recent updates for display
+          const updates = [];
+          if (freshData.monthly_income && (!data || data.monthly_income !== freshData.monthly_income)) {
+            updates.push({ type: 'income', text: 'Income updated' });
+          }
+          if (freshData.monthly_expenses && (!data || data.monthly_expenses !== freshData.monthly_expenses)) {
+            updates.push({ type: 'expenses', text: 'Expenses updated' });
+          }
+          if (freshData.loans && (!data || freshData.loans.length > (data.loans?.length || 0))) {
+            updates.push({ type: 'loans', text: 'New EMI added' });
+          }
+          setRecentUpdates(updates);
         }
       } catch (error) {
         console.error('Profile fetch error:', error);
@@ -126,6 +143,25 @@ export default function HomeScreen() {
         </div>
       </div>
 
+      {/* Recent Updates Notification */}
+      <AnimatePresence>
+        {recentUpdates.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="mb-6 flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-4 py-3"
+          >
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-green-800">Profile updated from chat</p>
+              <p className="text-xs text-green-600">{recentUpdates.map(u => u.text).join(', ')}</p>
+            </div>
+            <Clock className="h-3 w-3 text-green-500" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* QUICK FACTS (Phase 3) */}
       {(data?.monthly_income || data?.monthly_expenses || data?.savings_goal_amount || data?.goals?.length > 0 || data?.loans?.length > 0) && (
         <div className="mb-6 flex flex-wrap items-center gap-2">
@@ -153,37 +189,8 @@ export default function HomeScreen() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
         {/* FITNESS GAUGE */}
-        <Card className="border-orange-200 shadow-lg shadow-orange-100/50 p-6 flex items-center gap-6 bg-gradient-to-br from-white to-orange-50/30 hover:shadow-xl transition-shadow duration-300">
-          <div className="relative w-28 h-28 shrink-0">
-            <svg className="w-28 h-28 -rotate-90">
-              <circle cx="56" cy="56" r="46" fill="none" stroke="#F1EADA" strokeWidth="10" />
-              <circle 
-                cx="56" cy="56" r="46" 
-                fill="none" stroke="#FF6A1A" strokeWidth="10" 
-                strokeLinecap="round"
-                strokeDasharray={`${Math.min(100, score)}`}
-                strokeDashoffset="0"
-                className="drop-shadow-md"
-              />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-3xl font-bold font-poppins text-slate-800">{Math.round(score)}</span>
-              <span className="text-xs text-slate-500">/ 100</span>
-            </div>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Financial Fitness</p>
-            <h2 className="text-lg font-semibold mt-1 text-slate-800">
-              {score >= 80 ? 'Excellent! 🎉' : score >= 50 ? 'Good progress!' : 'Keep going! 💪'}
-            </h2>
-            <div className="flex gap-2 mt-2">
-              <Badge variant="secondary" className="bg-green-50 text-green-700 border-green-200">🌱 {level}</Badge>
-              <Badge variant="secondary" className="bg-orange-50 text-orange-700 border-orange-200">🔥 {streak}-day streak</Badge>
-            </div>
-            <p className="text-xs text-slate-500 mt-2">
-              {score >= 50 ? 'You\'re on the right track!' : 'Complete a challenge to start.'}
-            </p>
-          </div>
+        <Card className="border-orange-200 shadow-lg shadow-orange-100/50 p-6 bg-gradient-to-br from-white to-orange-50/30 hover:shadow-xl transition-shadow duration-300">
+          <FitnessGauge score={score} level={level} streak={streak} />
         </Card>
 
         {/* PROACTIVE NUDGE */}

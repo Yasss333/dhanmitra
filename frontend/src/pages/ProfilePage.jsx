@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
-import { Loader2, Plus, Save, Trash2, User2, TrendingUp } from 'lucide-react';
+import { Loader2, Plus, Save, Trash2, User2, TrendingUp, Clock, CheckCircle2, RefreshCw } from 'lucide-react';
 import AppLayout from '@/components/layout/AppLayout';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { getProfile, saveProfile } from '@/lib/api';
 import { useUserProfile } from '@/context/UserProfileContext';
 import { useToast } from '@/context/ToastContext';
+import { motion } from 'framer-motion';
 
 const RISK_OPTIONS = [
   { value: 'conservative', label: 'Conservative' },
@@ -26,6 +27,7 @@ export default function ProfilePage() {
 
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [recentlyUpdated, setRecentlyUpdated] = useState({}); // Track recently updated fields
   const [form, setForm] = useState({
     monthly_income: '',
     monthly_expenses: '',
@@ -46,6 +48,24 @@ export default function ProfilePage() {
       try {
         const doc = await getProfile(user.id);
         if (cancelled) return;
+        
+        // Detect recently updated fields by comparing with current form
+        const updatedFields = {};
+        if (doc.monthly_income && doc.monthly_income !== form.monthly_income) {
+          updatedFields.monthly_income = true;
+        }
+        if (doc.monthly_expenses && doc.monthly_expenses !== form.monthly_expenses) {
+          updatedFields.monthly_expenses = true;
+        }
+        if (doc.savings_goal_amount && doc.savings_goal_amount !== form.savings_goal_amount) {
+          updatedFields.savings_goal_amount = true;
+        }
+        if (doc.loans && doc.loans.length > form.loans.length) {
+          updatedFields.loans = true;
+        }
+        
+        setRecentlyUpdated(updatedFields);
+        
         setForm({
           monthly_income: doc.monthly_income ?? '',
           monthly_expenses: doc.monthly_expenses ?? '',
@@ -121,6 +141,7 @@ export default function ProfilePage() {
       await saveProfile(payload);
       updateProfile({ riskProfile: form.risk_profile, goals: form.goals });
       addToast('Profile saved', 'success');
+      setRecentlyUpdated({}); // Clear the update indicators after manual save
     } catch (err) {
       addToast(err.message || 'Failed to save profile', 'error');
     } finally {
@@ -145,10 +166,10 @@ export default function ProfilePage() {
   const disposable = income !== null && expenses !== null ? Math.max(0, income - expenses) : null;
 
   const tiles = [
-    { label: 'Monthly income', value: income != null ? `₹${income.toLocaleString('en-IN')}` : '—', icon: '💰' },
-    { label: 'Monthly expenses', value: expenses != null ? `₹${expenses.toLocaleString('en-IN')}` : '—', icon: '🧾' },
-    { label: 'Savings goal', value: goalAmount != null ? `₹${goalAmount.toLocaleString('en-IN')}` : '—', icon: '🎯' },
-    { label: 'Disposable', value: disposable != null ? `₹${disposable.toLocaleString('en-IN')}` : '—', icon: '📈' },
+    { label: 'Monthly income', value: income != null ? `₹${income.toLocaleString('en-IN')}` : '—', icon: '💰', key: 'monthly_income' },
+    { label: 'Monthly expenses', value: expenses != null ? `₹${expenses.toLocaleString('en-IN')}` : '—', icon: '🧾', key: 'monthly_expenses' },
+    { label: 'Savings goal', value: goalAmount != null ? `₹${goalAmount.toLocaleString('en-IN')}` : '—', icon: '🎯', key: 'savings_goal_amount' },
+    { label: 'Disposable', value: disposable != null ? `₹${disposable.toLocaleString('en-IN')}` : '—', icon: '📈', key: 'disposable' },
   ];
 
   return (
@@ -168,7 +189,17 @@ export default function ProfilePage() {
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         {tiles.map((tile) => (
-          <Card key={tile.label} className="border-orange-200 shadow-sm">
+          <Card key={tile.label} className="border-orange-200 shadow-sm relative overflow-hidden">
+            {recentlyUpdated[tile.key] && (
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="absolute top-2 right-2 flex items-center gap-1 bg-green-50 text-green-700 px-2 py-1 rounded-full text-xs font-medium border border-green-200"
+              >
+                <CheckCircle2 className="h-3 w-3" />
+                <span>Updated</span>
+              </motion.div>
+            )}
             <CardContent className="p-5">
               <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{tile.icon} {tile.label}</p>
               <p className="mt-1.5 text-xl font-bold text-slate-800">{tile.value}</p>
@@ -239,7 +270,19 @@ export default function ProfilePage() {
           {/* Loans */}
           <div className="mt-6">
             <div className="flex items-center justify-between mb-3">
-              <Label className="mb-0">Loans / EMIs</Label>
+              <div className="flex items-center gap-2">
+                <Label className="mb-0">Loans / EMIs</Label>
+                {recentlyUpdated.loans && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex items-center gap-1 bg-green-50 text-green-700 px-2 py-1 rounded-full text-xs font-medium border border-green-200"
+                  >
+                    <CheckCircle2 className="h-3 w-3" />
+                    <span>Updated</span>
+                  </motion.div>
+                )}
+              </div>
               <Button type="button" variant="outline" size="sm" className="border-orange-200 text-orange-600 hover:bg-orange-50" onClick={addLoan}><Plus className="mr-1 h-3.5 w-3.5" />Add loan</Button>
             </div>
             {form.loans.length === 0 && <p className="text-sm text-slate-400">No loans added.</p>}

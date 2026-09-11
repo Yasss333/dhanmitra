@@ -11,6 +11,7 @@ class LoanEntry(BaseModel):
 
 class UserProfile(BaseModel):
     user_id: str
+    name: str = ""
     language: str = "english"
     occupation: str = "other"
     money_comfort: str = "beginner"

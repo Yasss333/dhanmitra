@@ -25,8 +25,21 @@ function ChatAdapter({ userId, profile, sessionId, initialMessages, onReset }) {
         mode: 'sahayak',
         sessionId,
         userId: userId || 'anonymous',
-        profile,
+        profile: {
+          occupation: profile?.occupation || null,
+          goals: profile?.goals || [],
+          language: profile?.language || 'english',
+          money_comfort: profile?.moneyComfort || profile?.money_comfort || 'beginner',
+          monthly_income: profile?.monthly_income || null,
+          monthly_expenses: profile?.monthly_expenses || null,
+          savings_goal_amount: profile?.savings_goal_amount || null,
+          loans: profile?.loans || [],
+          sips: profile?.sips || [],
+        }
       };
+
+      // Debug: Log what's being sent
+      console.log('[Chat] Sending profile:', payload.profile);
 
       try {
         const data = await sendChatMessage(payload);

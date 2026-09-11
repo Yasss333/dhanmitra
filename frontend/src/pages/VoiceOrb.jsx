@@ -1,11 +1,28 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useUserProfile } from '@/context/UserProfileContext';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Phone, PhoneOff, AudioLines } from 'lucide-react';
+import { ArrowLeft, Phone, PhoneOff, AudioLines, Calculator } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 function VolumeListening() {
   return <AudioLines className="h-4 w-4 text-orange-400" />;
+}
+
+// EMI detection patterns
+const EMI_PATTERNS = [
+  /emi/i,
+  /loan/i,
+  /debt/i,
+  /afford/i,
+  / installment/i,
+  /monthly payment/i,
+  /financial advice/i,
+  /money problem/i,
+  /budget/i,
+];
+
+function detectEMIQuery(text) {
+  return EMI_PATTERNS.some(pattern => pattern.test(text));
 }
 // ─────────────────────────────────────────────────────────────
 // Vapi integration — replaces Web Speech API for voice
@@ -33,6 +50,7 @@ export default function VoiceOrb() {
   const [status, setStatus] = useState('idle'); // idle | listening | thinking | speaking
   const [error, setError] = useState('');
   const [transcript, setTranscript] = useState([]); // [{ id, role, text }]
+  const [isEMIQuery, setIsEMIQuery] = useState(false); // Track if current query is EMI-related
   const vapiRef = useRef(null);
   const connectedRef = useRef(false);
   const idRef = useRef(0);
@@ -91,6 +109,9 @@ export default function VoiceOrb() {
         if (msg?.type === 'assistant') {
           pushTranscript('assistant', text);
         } else if (msg?.type === 'user') {
+          // Detect EMI queries for visual feedback
+          const isEMI = detectEMIQuery(text);
+          setIsEMIQuery(isEMI);
           pushTranscript('user', text);
         }
       });
@@ -186,13 +207,30 @@ export default function VoiceOrb() {
       </div>
 
       {/* Orb */}
-      <button
-        onClick={handleOrbClick}
-        disabled={status === 'thinking'}
-        aria-label={statusText}
-        className={`orb ${status === 'listening' ? 'listening' : ''} ${status === 'thinking' ? 'opacity-60 cursor-not-allowed' : ''}`}
-        style={{ border: 'none', background: 'none', padding: 0 }}
-      />
+      <div className="relative">
+        {/* EMI Indicator */}
+        <AnimatePresence>
+          {isEMIQuery && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="absolute -top-12 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-orange-500/20 border border-orange-500/30 rounded-full px-3 py-1.5"
+            >
+              <Calculator className="h-3.5 w-3.5 text-orange-400" />
+              <span className="text-orange-400 text-xs font-medium">EMI Analysis Active</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        
+        <button
+          onClick={handleOrbClick}
+          disabled={status === 'thinking'}
+          aria-label={statusText}
+          className={`orb ${status === 'listening' ? 'listening' : ''} ${status === 'thinking' ? 'opacity-60 cursor-not-allowed' : ''}`}
+          style={{ border: 'none', background: 'none', padding: 0 }}
+        />
+      </div>
 
       {/* Call controls */}
       <div className="flex items-center gap-3">

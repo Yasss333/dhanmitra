@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
 import re
+import json
 from services.memory import get_recent_messages, append_message, get_session_messages, get_user_sessions
 from agents.agno_agents import AgentRouter
 from services.whatsapp_service import whatsapp_service
@@ -34,6 +35,16 @@ GOAL_KEYWORDS = ["emergency fund", "new house", "buy a house", "retirement", "ed
 GOAL_NAME_PATTERNS = [
     r"(?:want|plan|goal|build|save for|create|set up|target).*?\b(" + "|".join(g.replace(" ", r"\s+") for g in GOAL_KEYWORDS) + r")\b"
 ]
+EMI_PATTERNS = [
+    r"(?:my\s+)?(?:current\s+)?(?:monthly\s+)?(?:emi|EMI)\s+(?:is|of|=\s*)?\s*(?:₹|rs\.?|inr)?\s*([\d,]+(?:\s*[kK])?)",
+    r"(?:i\s+)?(?:pay|have)\s+(?:about\s+)?(?:an\s+)?(?:emi|EMI)\s+(?:of\s+)?(?:₹|rs\.?|inr)?\s*([\d,]+(?:\s*[kK])?)",
+    r"(?:take|want|considering)\s+(?:another\s+)?(?:new\s+)?(?:emi|EMI|loan)\s+(?:of\s+)?(?:₹|rs\.?|inr)?\s*([\d,]+(?:\s*[kK])?)",
+]
+LOAN_PATTERNS = [
+    r"(?:my\s+)?(?:loan|debt)\s+(?:is|amount|outstanding)\s+(?:of\s+)?(?:₹|rs\.?|inr)?\s*([\d,]+(?:\s*[kK])?)",
+    r"(?:i\s+)?(?:have|owe)\s+(?:about\s+)?(?:₹|rs\.?|inr)?\s*([\d,]+(?:\s*[kK])?)\s*(?:in\s+loans|debt)",
+]
+SCHEME_KEYWORDS = ("scheme", "yojana", "subsidy", "pension", "welfare", "government benefit")
 
 
 def _parse_amount(raw: str):
@@ -96,6 +107,31 @@ def persist_memory_from_message(user_id: str, message: str):
             updates["goals"] = goals
             break
 
+    # EMI-specific pattern extraction
+    current_emi = None
+    for pat in EMI_PATTERNS:
+        m = re.search(pat, text)
+        if m:
+            current_emi = _parse_amount(m.group(1))
+            break
+
+    # If EMI found, check if user is asking about taking another EMI
+    new_emi = None
+    if current_emi and "take" in text or "want" in text or "another" in text:
+        for pat in EMI_PATTERNS:
+            m = re.search(pat, text)
+            if m:
+                new_emi = _parse_amount(m.group(1))
+                break
+
+    # Extract loan amounts
+    loan_amount = None
+    for pat in LOAN_PATTERNS:
+        m = re.search(pat, text)
+        if m:
+            loan_amount = _parse_amount(m.group(1))
+            break
+
     if updates:
         updates["updated_at"] = datetime.now(timezone.utc).isoformat()
         # users collection has a legacy unique index on userId; set both to avoid null collisions
@@ -105,6 +141,73 @@ def persist_memory_from_message(user_id: str, message: str):
             upsert=True,
         )
         print(f"[MEMORY] Persisted for {user_id}: {list(updates.keys())}")
+
+    return {
+        "current_emi": current_emi,
+        "new_emi": new_emi,
+        "loan_amount": loan_amount
+    }
+
+
+def _demo_scheme_reply(profile: dict, message: str):
+    """Return seeded occupation-specific schemes without an LLM tool round-trip."""
+    text = message.lower()
+    if not any(keyword in text for keyword in SCHEME_KEYWORDS):
+        return None
+
+    occupation = profile.get("occupation")
+    if not occupation:
+        return None
+
+    from db.mongo import get_collection
+
+    schemes = list(get_collection("schemes").find(
+        {"target_groups": {"$in": [occupation]}},
+        {"_id": 0},
+    ).limit(5))
+    if not schemes:
+        return None
+
+    lines = [f"Here are government schemes relevant to you as a {occupation.replace('_', ' ')}:"]
+    for index, scheme in enumerate(schemes, 1):
+        eligibility = "; ".join(scheme.get("eligibility") or [])
+        lines.append(
+            f"{index}. {scheme.get('name')}: {scheme.get('description')}. "
+            f"Benefits: {scheme.get('benefits')}. Eligibility to check: {eligibility}. "
+            f"Apply: {scheme.get('apply_url')}"
+        )
+    lines.append("Eligibility can depend on income, age, documents, location, and other conditions. Government scheme registration is free.")
+    return "\n\n".join(lines)
+
+
+def _demo_profile_reply(profile: dict, message: str):
+    text = message.lower()
+    profile_question = (
+        ("know" in text and "me" in text)
+        or ("tell" in text and "profile" in text)
+        or "my profile" in text
+    )
+    if not profile_question:
+        return None
+
+    occupation = str(profile.get("occupation") or "not set").replace("_", " ")
+    income = profile.get("monthly_income")
+    expenses = profile.get("monthly_expenses")
+    goals = profile.get("goals") or ([profile["goal"]] if profile.get("goal") else [])
+    loans = profile.get("loans") or []
+    sips = profile.get("sips") or []
+    lines = [
+        "Here is what I know from your saved profile:",
+        f"- Occupation: {occupation}",
+        f"- Monthly income: Rs. {income:,}" if isinstance(income, (int, float)) else "- Monthly income: not set",
+        f"- Monthly expenses: Rs. {expenses:,}" if isinstance(expenses, (int, float)) else "- Monthly expenses: not set",
+        f"- Goals: {', '.join(str(goal) for goal in goals) if goals else 'none listed'}",
+        f"- Loans: {len(loans)} listed",
+        f"- Active SIPs: {len(sips)} listed",
+        f"- Language: {profile.get('language') or 'english'}",
+        f"- Money comfort: {profile.get('money_comfort') or 'not set'}",
+    ]
+    return "\n".join(lines)
 
 class ChatRequest(BaseModel):
     message: str
@@ -123,18 +226,66 @@ async def process_chat(req: ChatRequest) -> dict:
     Core chat processing logic – used by both the web endpoint and WhatsApp webhook.
     """
     try:
-        profile = req.profile or {}
+        profile = dict(req.profile or {})
+        if req.user_id and req.user_id != "anonymous":
+            from db.mongo import get_collection
+
+            stored = get_collection("users").find_one(
+                {"$or": [{"user_id": req.user_id}, {"userId": req.user_id}]},
+                {"_id": 0},
+            ) or {}
+            for key, value in stored.items():
+                if key not in profile or profile[key] is None or (isinstance(profile[key], list) and not profile[key]):
+                    profile[key] = value
         history = get_recent_messages(req.session_id)
 
-        # Persistent memory: capture financial facts (income, expenses, goal) from chat
-        persist_memory_from_message(req.user_id or "anonymous", req.message)
+        # Debug: Log incoming profile data
+        print(f"[CHAT] Incoming request profile: {profile}")
+        print(f"[CHAT] User ID: {req.user_id}")
+        print(f"[CHAT] Profile occupation: {profile.get('occupation')}")
+        print(f"[CHAT] Profile goals: {profile.get('goals')}")
+
+        # Persistent memory: capture financial facts (income, expenses, goal, EMI) from chat
+        emi_info = persist_memory_from_message(req.user_id or "anonymous", req.message)
 
         # Call Agno Router with full context
+        # Add EMI info to dependencies if available
+        dependencies = {"profile": profile, "history": history}
+        if emi_info and (emi_info.get("current_emi") or emi_info.get("new_emi")):
+            dependencies["emi_info"] = emi_info
+
+        demo_reply = _demo_profile_reply(profile, req.message) or _demo_scheme_reply(profile, req.message)
+        if demo_reply:
+            return {
+                "reply": demo_reply,
+                "payment": None,
+                "agent_trace": {
+                    "systems": ["DhanMitra Demo Profile Context"],
+                    "internalLoop": [{"turn": 1, "label": "Used stored demo profile context"}],
+                },
+                "routing": {
+                    "agents": ["Scheme_Finder" if _demo_scheme_reply(profile, req.message) else "Sahayak"],
+                    "intent": req.message,
+                    "language": profile.get("language", "english"),
+                },
+            }
+
+        # Debug: Log dependencies being passed to agent
+        print(f"[CHAT] Dependencies to agent: {list(dependencies.keys())}")
+        print(f"[CHAT] Profile in dependencies: {dependencies.get('profile')}")
+
+        # Try to pass profile directly to agent context
+        profile_context = json.dumps(profile, ensure_ascii=True, default=str)
+        agent_message = (
+            f"User message: {req.message}\n\n"
+            f"Current user profile (use this directly; do not ask the user to repeat these details): {profile_context}"
+        )
         response = await AgentRouter.arun(
-            req.message,
+            agent_message,
             user_id=req.user_id,
             session_id=req.session_id,
-            dependencies={"profile": profile, "history": history},
+            dependencies=dependencies,
+            context={"profile": dependencies.get("profile")}  # Add profile to agent context as well
         )
 
         # Extract reply

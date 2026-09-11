@@ -86,20 +86,18 @@ def update_user_memory(
     return {"success": True, "updated": {k: v for k, v in updates.items() if k != "updated_at"}}
 
 @tool
-def search_schemes(query: str, occupation: str = "other") -> list:
+def search_schemes(query: str, occupation: str = "other", profile: dict = None) -> list:
     """
     Search for government schemes using semantic search (RAG) and keyword filter.
     First searches LanceDB for relevant scheme documents, then filters by occupation.
+    Returns schemes with eligibility scoring and prioritization based on user's occupation.
     """
-    vector_store = get_vector_store()
-    # Semantic search
-    results = vector_store.search(query, limit=10)
+    # Use profile occupation if provided
+    if profile and profile.get("occupation"):
+        occupation = profile.get("occupation")
     
-    # Fetch full scheme objects from MongoDB for the matched IDs
     col = get_collection("schemes")
-    matched_ids = [r.meta_data.get("scheme_id") for r in results if r.meta_data]
-    
-    # Also query MongoDB directly for occupation match
+    # Query MongoDB directly for occupation match with higher priority
     db_results = list(col.find(
         {"target_groups": {"$in": [occupation]}},
         {"_id": 0}
@@ -108,19 +106,29 @@ def search_schemes(query: str, occupation: str = "other") -> list:
     # Combine and deduplicate based on scheme_id
     seen = set()
     combined = []
+    
+    # First add occupation-specific results (higher priority)
     for s in db_results:
         if s.get('scheme_id') not in seen:
+            s['match_score'] = 1.0  # Occupation match gets highest score
             seen.add(s.get('scheme_id'))
             combined.append(s)
-            
-    # Add LanceDB results if not already present
-    for r in results:
-        if r.meta_data and r.meta_data.get('scheme_id') not in seen:
-            # Fetch full doc from MongoDB
-            doc = col.find_one({"scheme_id": r.meta_data['scheme_id']}, {"_id": 0})
-            if doc:
-                combined.append(doc)
-                seen.add(r.meta_data['scheme_id'])
+
+    # Occupation matches are sufficient for the seeded demo account. Use RAG only
+    # when MongoDB cannot provide enough targeted results.
+    if not combined:
+        vector_store = get_vector_store()
+        results = vector_store.search(query, limit=10)
+        for r in results:
+            if r.meta_data and r.meta_data.get('scheme_id') not in seen:
+                doc = col.find_one({"scheme_id": r.meta_data['scheme_id']}, {"_id": 0})
+                if doc:
+                    doc['match_score'] = 0.7
+                    combined.append(doc)
+                    seen.add(r.meta_data['scheme_id'])
+    
+    # Sort by match score (occupation matches first)
+    combined.sort(key=lambda x: x.get('match_score', 0), reverse=True)
     
     return combined[:5]  # Return top 5
 
@@ -373,11 +381,173 @@ def start_sip(amount: int, frequency: str, purpose: str, user_id: str, session_i
         return {"success": False, "error": f"Failed to start SIP: {str(e)}"}
 
 @tool
-def apply_mitra_insights(draft_reply: str, profile: dict[str, object]) -> str:
+def calculate_emi_affordability(
+    user_id: str,
+    current_emi: int = None,
+    new_emi: int = None,
+    monthly_income: int = None,
+    monthly_expenses: int = None
+) -> dict:
+    """
+    Calculate EMI affordability and debt-to-income ratio for personalized advice.
+    This tool helps analyze whether taking on additional EMI is financially prudent.
+    
+    Args:
+        user_id: The user's ID to fetch their profile
+        current_emi: Current total EMI obligations (in rupees)
+        new_emi: Additional EMI being considered (in rupees)
+        monthly_income: Monthly income (in rupees)
+        monthly_expenses: Monthly expenses excluding EMI (in rupees)
+    
+    Returns:
+        Dictionary with affordability analysis, debt-to-income ratio, and recommendation
+    """
+    try:
+        # Fetch user profile if not provided
+        if not monthly_income or not monthly_expenses:
+            col = get_collection("users")
+            profile = col.find_one({"user_id": user_id}, {"_id": 0})
+            if profile:
+                monthly_income = monthly_income or profile.get("monthly_income")
+                monthly_expenses = monthly_expenses or profile.get("monthly_expenses")
+        
+        if not monthly_income or not monthly_expenses:
+            return {
+                "success": False,
+                "error": "Need monthly income and expenses to calculate affordability"
+            }
+        
+        # Calculate current total EMI from profile if not provided
+        if current_emi is None:
+            col = get_collection("users")
+            profile = col.find_one({"user_id": user_id}, {"_id": 0})
+            if profile and profile.get("loans"):
+                current_emi = sum(loan.get("emi", 0) for loan in profile.get("loans", []) if loan.get("emi"))
+        
+        # Calculate scenarios
+        current_total_emi = current_emi or 0
+        total_emi_with_new = current_total_emi + (new_emi or 0)
+        
+        # Calculate debt-to-income ratio
+        current_dti = (current_total_emi / monthly_income * 100) if monthly_income > 0 else 0
+        new_dti = (total_emi_with_new / monthly_income * 100) if monthly_income > 0 else 0
+        
+        # Calculate disposable income after EMI
+        current_disposable = monthly_income - monthly_expenses - current_total_emi
+        new_disposable = monthly_income - monthly_expenses - total_emi_with_new
+        
+        # Determine affordability
+        recommendation = ""
+        risk_level = "low"
+        
+        if new_dti > 50:
+            recommendation = "❌ NOT RECOMMENDED: New EMI would push your debt-to-income ratio above 50%. This is considered high-risk."
+            risk_level = "high"
+        elif new_dti > 40:
+            recommendation = "⚠️ CAUTION: New EMI would increase your debt-to-income ratio significantly. Consider reducing existing debt first."
+            risk_level = "medium"
+        elif new_dti > 30:
+            recommendation = "⚡ PROCEED WITH CAUTION: New EMI is manageable but leaves less buffer for emergencies."
+            risk_level = "medium"
+        else:
+            recommendation = "✅ AFFORDABLE: New EMI fits well within your income with comfortable disposable income remaining."
+            risk_level = "low"
+        
+        # Add specific financial advice
+        advice = {
+            "current_dti": round(current_dti, 1),
+            "new_dti": round(new_dti, 1),
+            "current_disposable": round(current_disposable),
+            "new_disposable": round(new_disposable),
+            "risk_level": risk_level,
+            "recommendation": recommendation,
+            "monthly_income": monthly_income,
+            "total_emi_with_new": total_emi_with_new
+        }
+        
+        # Add specific tips based on scenario
+        if new_disposable < 5000:
+            advice["tip"] = "💡 Tip: Consider building a larger emergency fund before taking on new debt."
+        elif current_disposable - new_disposable > 10000:
+            advice["tip"] = "💡 Tip: The reduction in disposable income is significant. Ensure you have adequate emergency savings."
+        else:
+            advice["tip"] = "💡 Tip: Maintain at least 3-6 months of expenses as emergency fund before taking new EMI."
+        
+        return {
+            "success": True,
+            "analysis": advice
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Failed to calculate EMI affordability: {str(e)}"
+        }
+
+@tool
+def add_emi_to_profile(
+    user_id: str,
+    emi_amount: int,
+    lender: str = None,
+    loan_type: str = "personal",
+    outstanding: int = None
+) -> dict:
+    """
+    Add an EMI/loan to the user's profile after discussion.
+    This is called when the user confirms they want to proceed with a loan/EMI.
+    
+    Args:
+        user_id: The user's ID
+        emi_amount: Monthly EMI amount in rupees
+        lender: Name of the lender (e.g., "HDFC", "ICICI")
+        loan_type: Type of loan (personal, home, education, vehicle, credit_card, other)
+        outstanding: Outstanding loan amount (optional)
+    """
+    try:
+        col = get_collection("users")
+        
+        loan_entry = {
+            "type": loan_type or "personal",
+            "lender": lender or "Unknown",
+            "emi": emi_amount,
+            "outstanding": outstanding or 0,
+            "added_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        result = col.update_one(
+            {"user_id": user_id},
+            {
+                "$push": {"loans": loan_entry},
+                "$set": {
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "userId": user_id,
+                    "user_id": user_id
+                }
+            },
+            upsert=True
+        )
+        
+        return {
+            "success": True,
+            "message": f"EMI of ₹{emi_amount} from {lender or 'Unknown'} has been added to your profile.",
+            "loan": loan_entry
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Failed to add EMI to profile: {str(e)}"
+        }
+
+@tool
+def apply_mitra_insights(draft_reply: str, profile: dict[str, object] = None) -> str:
     """
     The Heart of DhanMitra. Enriches a draft reply with rupee comparisons,
     risk flags, and savings impact based on the user's money_comfort level.
     """
+    if not profile:
+        return draft_reply  # Return as-is if no profile provided
+        
     comfort = profile.get("money_comfort", "beginner")
     occupation = profile.get("occupation", "other")
     

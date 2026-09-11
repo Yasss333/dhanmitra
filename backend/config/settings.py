@@ -8,8 +8,8 @@ MONGODB_URI = os.getenv("MONGODB_URI")
 DB_NAME = os.getenv("DB_NAME", "Dhan-mitra-proto")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
-DEFAULT_MODEL = "google/gemma-4-31b-it:free"
-FALLBACK_MODEL = "meta-llama/llama-3.2-3b-instruct:free"
+DEFAULT_MODEL = "nex-agi/nex-n2.5-mini:free"
+FALLBACK_MODEL = "nex-agi/nex-n2.5-pro:free"
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
