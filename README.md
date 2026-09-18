@@ -29,7 +29,10 @@
 DhanMitra is a **voice-first, multilingual AI assistant** that speaks Hindi, Marathi, Kannada, or English — and adapts to *your* life.
 
 ---
-
+## 🎥 Demo(Click the banner below )
+<a href="https://youtu.be/zL3h2lrjEfA">
+  <img src="dhamitra_banner.png" width="100%" alt="DhanMitra Demo">
+</a>
 ## Features
 
 | | Feature | What it does |
