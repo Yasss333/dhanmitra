@@ -69,7 +69,7 @@ def persist_memory_from_message(user_id: str, message: str):
     from datetime import datetime, timezone
     col = get_collection("users")
     existing = col.find_one({"user_id": user_id}) or {}
-
+#   re is regex search
     updates = {}
     text = message.lower()
 
