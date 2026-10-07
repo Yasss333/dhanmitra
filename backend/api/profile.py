@@ -6,8 +6,10 @@ from models.user import LoanEntry
 from typing import List, Optional
 
 router = APIRouter()
+# //THis is same as express.Router()
 
 
+# below is liek  the Zod base model we create for type safelty 
 class ProfileUpsert(BaseModel):
     user_id: str
     name: str = ""
@@ -33,6 +35,7 @@ async def upsert_profile(data: ProfileUpsert):
         col = get_collection("users")
         now = datetime.now(timezone.utc).isoformat()
         payload = data.model_dump()
+        # //below stuff for mongodb 
         payload["loans"] = [loan.model_dump() if hasattr(loan, "model_dump") else loan for loan in data.loans]
         payload["userId"] = data.user_id  # satisfy legacy unique index; also keep user_id
         col.update_one(

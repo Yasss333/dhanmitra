@@ -12,6 +12,7 @@ from services.scheduler import start_scheduler, stop_scheduler
 from api.telegram import router as telegram_router
 from api.telegram_link import router as telegram_link_router
 from api.telegram import telegram_service
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     start_scheduler()
